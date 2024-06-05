@@ -103,6 +103,7 @@ nbclient==0.7.4
 nbconvert==7.16.4
 nbformat==5.10.4
 nest-asyncio==1.6.0
+-e git+https://github.com/alex-petrenko/sample-factory.git@071574b65d736efda4ce4de1caa8e140ae917c38#egg=nethack_render_utils&subdirectory=sf_examples/nethack/nethack_render_utils
 networkx==3.3
 -e git+https://github.com/heiner/nle.git@e3e4253d808ed98c47fae7499a4f87159cf01756#egg=nle
 nltk==3.8.1
