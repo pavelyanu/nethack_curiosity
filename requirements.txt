@@ -104,6 +104,7 @@ nbconvert==7.16.4
 nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.3
+-e git+https://github.com/heiner/nle.git@e3e4253d808ed98c47fae7499a4f87159cf01756#egg=nle
 nltk==3.8.1
 notebook==7.2.0
 notebook_shim==0.2.4
@@ -164,6 +165,7 @@ requests==2.31.0
 rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1
 rpds-py==0.18.1
+-e git+https://github.com/alex-petrenko/sample-factory.git@071574b65d736efda4ce4de1caa8e140ae917c38#egg=sample_factory
 scikit-learn==1.3.2
 scipy==1.11.4
 seaborn==0.13.2
