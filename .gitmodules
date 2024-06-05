@@ -1,0 +1,6 @@
+[submodule "externals/nle"]
+	path = externals/nle
+	url = https://github.com/heiner/nle
+[submodule "externals/sample-factory"]
+	path = externals/sample-factory
+	url = https://github.com/alex-petrenko/sample-factory/tree/master
