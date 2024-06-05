@@ -1,0 +1,61 @@
+from setuptools import setup, find_packages
+
+setup(
+    name='nethack_curiosity',
+    version='0.1.0',
+    author='Pavel Yanushonak',
+    author_email='pyanushonak@gmail.com',
+    description='Experiment setup for my thesis: Enhancing PPO with curiosity. Study in NetHack environment.',
+    long_description=open('README.md').read(),
+    long_description_content_type='text/markdown',
+    url='http://github.com/yourusername/nethack_curiosity',
+    packages=find_packages(),
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.10',
+        'Operating System :: Ubuntu 22.04',
+    ],
+    python_requires='>=3.10',
+    setup_requires=[
+        'pybind11>=2.2'
+    ],
+    install_requires=[
+        "pybind11>=2.2",
+        "numpy>=1.18.1,<2.0",
+        "gymnasium==0.29.1",
+        "torch>=1.9,<3.0",
+        "tensorboard>=1.15.0",
+        "tensorboardx>=2.0",
+        "psutil>=5.7.0",
+        "threadpoolctl>=2.0.0",
+        "colorlog",
+        "signal-slot-mp>=1.0.3,<2.0",
+        "filelock",
+        "opencv-python",
+        "wandb>=0.12.9",
+        "huggingface-hub>=0.10.0,<1.0",
+        "pandas",
+    ],
+    extras_require={
+        "dev": [
+            "pre-commit>=2.0.1",
+            "isort>=5.13.2",
+            "cmake_format>=0.6.10",
+            "memory-profiler>=0.60.0",
+            "pytest>=6.2.5,<8.0",
+            "pytest-benchmark>=3.4.1",
+            "sphinx>=2.4.4",
+            "sphinx-rtd-theme>=0.4.3",
+            "setuptools>=69.5.1",
+            "ruff>=0.4.3",
+            "black",
+            "flake8",
+            "twine",
+        ],
+    },
+    include_package_data=True,
+    zip_safe=False
+)
