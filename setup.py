@@ -38,6 +38,7 @@ setup(
         "wandb>=0.12.9",
         "huggingface-hub>=0.10.0,<1.0",
         "pandas",
+        "minigrid>=2.3.1",
     ],
     extras_require={
         "dev": [

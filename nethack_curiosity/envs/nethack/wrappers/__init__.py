@@ -5,10 +5,10 @@ from sf_examples.nethack.utils.wrappers.screen_image import RenderCharImagesWith
 from sf_examples.nethack.utils.wrappers.task_rewards import TaskRewardsInfoWrapper
 from sf_examples.nethack.utils.wrappers.timelimit import NLETimeLimit
 
-from nethack_curiosity.envs.nethack.wrappers.visit_count import VisitCountWrapper
+from nethack_curiosity.envs.nethack.wrappers.nethack_visit_count import NethackVisitCountWrapper
 
 __all__ = [
     PrevActionsWrapper,
     SeedActionSpaceWrapper,
-    VisitCountWrapper,
+    NethackVisitCountWrapper,
 ]
