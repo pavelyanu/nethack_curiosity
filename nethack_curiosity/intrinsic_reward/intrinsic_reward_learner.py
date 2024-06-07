@@ -603,6 +603,10 @@ class IntrinsicRewardLearner(Learner):
                         )
                     self._apply_lr(actual_lr)
 
+                    ###################################################
+                    # TO MAKE PBT WORK WITH INTRINSIC REWARD LEARNER  #
+                    # WE WOULD NEED TO ALSO LOCK IR_MODULE PARAMETERS #
+                    ###################################################
                     with self.param_server.policy_lock:
                         self.optimizer.step()
 
