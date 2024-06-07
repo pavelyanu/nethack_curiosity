@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/externals/nle" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/externals/nle/third_party/deboost.context" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/externals/nle/third_party/pybind11" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/externals/sample-factory" vcs="Git" />
+  </component>
+</project>
