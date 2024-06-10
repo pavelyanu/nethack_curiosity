@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from typing import Tuple
+from types import MethodType
 
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.runners.runner import Runner
@@ -48,7 +49,7 @@ def make_ir_runner(cfg: Config) -> Tuple[Config, Runner]:
         cfg.num_policies == 1
     ), "Intrinsic reward learning only supports a single policy"
 
-    runner._make_learner = _make_learner
+    runner._make_learner = MethodType(_make_learner, runner)
 
     return cfg, runner
 
