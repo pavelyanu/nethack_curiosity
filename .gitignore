@@ -61,3 +61,6 @@ ipython_config.py
 
 # Pyre type checker
 .pyre/
+
+# Artifacts
+train_dir/

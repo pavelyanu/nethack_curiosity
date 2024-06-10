@@ -231,3 +231,6 @@ Werkzeug==3.0.3
 wget==3.2
 xlsx2csv==0.8.2
 zlib-state==0.1.6
+
+pytest~=8.2.2
+setuptools~=69.5.1
