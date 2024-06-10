@@ -13,7 +13,7 @@ from sample_factory.cfg.configurable import Configurable
 from sample_factory.utils.typing import Config, PolicyID
 from sample_factory.algo.learning.learner_worker import LearnerWorker
 
-from nethack_curiosity.intrinsic_reward.intrinsic_reward_learner import (
+from nethack_curiosity.intrinsic_reward.intrinsic_reward_algo.intrinsic_reward_learner import (
     IntrinsicRewardLearner,
 )
 
