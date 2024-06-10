@@ -1,3 +1,5 @@
+from typing import Optional
+
 import gymnasium as gym
 
 from nle.env.tasks import (
@@ -10,53 +12,84 @@ from nle.env.tasks import (
     NetHackScout,
     NetHackChallenge,
 )
+from nle.env.base import NLE
+
+from nethack_curiosity.envs.nethack.wrappers import (
+    __global_order__,
+    __required__,
+)
+
 
 # make liberal patterns for matching task names to classes
 # for example I want 'score', 'nethack_score', 'NetHackScore' to all match to NetHackScore
 def match_name_to_class(name: str) -> type:
-    if 'score' in name.lower():
+    if "score" in name.lower():
         return NetHackScore
-    if 'staircase' in name.lower() and 'pet' in name.lower():
+    if "staircase" in name.lower() and "pet" in name.lower():
         return NetHackStaircasePet
-    if 'staircase' in name.lower():
+    if "staircase" in name.lower():
         return NetHackStaircase
-    if 'oracle' in name.lower():
+    if "oracle" in name.lower():
         return NetHackOracle
-    if 'gold' in name.lower():
+    if "gold" in name.lower():
         return NetHackGold
-    if 'eat' in name.lower():
+    if "eat" in name.lower():
         return NetHackEat
-    if 'scout' in name.lower():
+    if "scout" in name.lower():
         return NetHackScout
-    if 'challenge' in name.lower():
+    if "challenge" in name.lower():
         return NetHackChallenge
     else:
         raise ValueError(f"Task {name} not found in available nethack tasks.")
 
 
-
 def make_nethack(
+    full_env_name: str, cfg=None, env_config=None, render_mode: Optional[str] = None
+) -> NLE:
+    assert render_mode in [None, "human", "ansi", "full"]
+    return _make_nethack(
+        name=full_env_name,
+        save_ttyrec_every=cfg.save_ttyrec_every,
+        savedir=cfg.savedir,
+        character=cfg.character,
+        max_episode_steps=cfg.max_episode_steps,
+        observation_keys=cfg.observation_keys,
+        actions=cfg.actions,
+        options=cfg.options,
+        wizard=cfg.wizard,
+        allow_all_yn_questions=cfg.allow_all_yn_questions,
+        allow_all_modes=cfg.allow_all_modes,
+        spawn_monsters=cfg.spawn_monsters,
+        render_mode=render_mode,
+        penalty_mode=cfg.penalty_mode,
+        penalty_step=cfg.penalty_step,
+        penalty_time=cfg.penalty_time,
+        add_required_wrappers=True,
+    )
+
+
+def _make_nethack(
     name: str,
     # below are for base
     save_ttyrec_every=0,
     savedir=None,
-    character: str = "mon-hum-neu-mal", 
+    character: str = "mon-hum-neu-mal",
     max_episode_steps: int = 5000,
     observation_keys: list = (
-            "glyphs",
-            "chars",
-            "colors",
-            "specials",
-            "blstats",
-            "message",
-            "inv_glyphs",
-            "inv_strs",
-            "inv_letters",
-            "inv_oclasses",
-            "screen_descriptions",
-            "tty_chars",
-            "tty_colors",
-            "tty_cursor",
+        "glyphs",
+        "chars",
+        "colors",
+        "specials",
+        "blstats",
+        "message",
+        "inv_glyphs",
+        "inv_strs",
+        "inv_letters",
+        "inv_oclasses",
+        "screen_descriptions",
+        "tty_chars",
+        "tty_colors",
+        "tty_cursor",
     ),
     actions: list = None,
     options: list = None,
@@ -69,7 +102,9 @@ def make_nethack(
     penalty_mode: str = "constant",
     penalty_step: float = -0.01,
     penalty_time: float = -0.0,
-) -> gym.Env:
+    # below are for wrappers
+    add_required_wrappers: bool = True,
+) -> NLE:
     """Constructs a new NetHack environment.
 
     Args:
@@ -115,9 +150,10 @@ def make_nethack(
             Defaults to -0.0.
     """
     task_class = match_name_to_class(name)
+    env: NLE
 
     if task_class == NetHackChallenge:
-        return task_class(
+        env = task_class(
             save_ttyrec_every=save_ttyrec_every,
             savedir=savedir,
             character=character,
@@ -133,21 +169,33 @@ def make_nethack(
             penalty_step=penalty_step,
             penalty_time=penalty_time,
         )
+    else:
+        env = task_class(
+            save_ttyrec_every=save_ttyrec_every,
+            savedir=savedir,
+            character=character,
+            max_episode_steps=max_episode_steps,
+            observation_keys=observation_keys,
+            actions=actions,
+            options=options,
+            wizard=wizard,
+            allow_all_yn_questions=allow_all_yn_questions,
+            allow_all_modes=allow_all_modes,
+            spawn_monsters=spawn_monsters,
+            render_mode=render_mode,
+            penalty_mode=penalty_mode,
+            penalty_step=penalty_step,
+            penalty_time=penalty_time,
+        )
 
-    return task_class(
-        save_ttyrec_every=save_ttyrec_every,
-        savedir=savedir,
-        character=character,
-        max_episode_steps=max_episode_steps,
-        observation_keys=observation_keys,
-        actions=actions,
-        options=options,
-        wizard=wizard,
-        allow_all_yn_questions=allow_all_yn_questions,
-        allow_all_modes=allow_all_modes,
-        spawn_monsters=spawn_monsters,
-        render_mode=render_mode,
-        penalty_mode=penalty_mode,
-        penalty_step=penalty_step,
-        penalty_time=penalty_time,
-    )
+    if add_required_wrappers:
+        env = apply_required_wrappers(env)
+
+    return env
+
+
+def apply_required_wrappers(env: NLE) -> NLE:
+    for wrapper in __global_order__:
+        if wrapper in __required__:
+            env = wrapper(env)
+    return env

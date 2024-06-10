@@ -1,35 +1,47 @@
-import gymnasium as gym
-import gymnasium.spaces as spaces
+from typing import Dict as DictType
 
+import gymnasium as gym
+from gymnasium.spaces import Dict, Discrete
 import numpy as np
 
+
 class NethackVisitCountWrapper(gym.Wrapper):
-    def __init__(self, env, hash=None):
+    def __init__(self, env, hash_function=None):
         super().__init__(env)
-        # raise NotImplementedError(f" spaces are {self.env.observation_space}")
-        obs_spaces = {"visit_count": spaces.Discrete(10000)}
-        obs_spaces.update([(k, self.env.observation_space[k]) for k in self.env.observation_space])
-        self.observation_space = spaces.Dict(obs_spaces)
-        self.hash = hash if hash is not None else self.define_hash()
+
+        assert env.observation_space.__class__ == Dict
+        # noinspection PyTypeChecker
+        old_space: Dict = env.observation_space
+
+        new_space: DictType = {"visit_count": Discrete(10000)}
+        new_space.update([(k, old_space[k]) for k in old_space.keys()])
+        self.observation_space = Dict(new_space)
+
+        self.hash = hash_function if hash_function is not None else self.define_hash()
+
         self.visit_counts = {}
 
     def define_hash(self):
-        obs_spaces = self.env.observation_space
-        try:
-            shape = obs_spaces["screen_image"].shape
+        # noinspection PyTypeChecker
+        obs_spaces: Dict = self.observation_space
+        if "screen_image" in obs_spaces.keys():
             return lambda obs: obs["screen_image"].tobytes()
-        except:
-            raise ValueError(f"No hash function defined for observation space. Spaces are: {' '.join(obs_spaces.keys())}")
+        else:
+            raise ValueError(
+                f"No hash function defined for observation space. Spaces are: {' '.join(obs_spaces.keys())}"
+            )
 
     def reset(self, **kwargs):
         self.visit_counts = {}
-        obs = self.env.reset(**kwargs)
+        _, obs = self.env.reset(**kwargs)
         obs["visit_count"] = np.array([0], dtype=np.uint64)
         return obs
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        hash = self.hash(obs)
-        obs["visit_count"] = np.array([self.visit_counts.get(hash, 0)], dtype=np.uint64)
-        self.visit_counts[hash] = obs["visit_count"][0] + 1
-        return obs, reward, done, info
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        state_hash = self.hash(obs)
+        obs["visit_count"] = np.array(
+            [self.visit_counts.get(state_hash, 0)], dtype=np.uint64
+        )
+        self.visit_counts[state_hash] = obs["visit_count"][0] + 1
+        return obs, reward, terminated, info
