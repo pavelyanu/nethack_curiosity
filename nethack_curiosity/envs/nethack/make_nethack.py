@@ -18,6 +18,7 @@ from nethack_curiosity.envs.nethack.wrappers import (
     __global_order__,
     __required__,
 )
+from sample_factory.utils.typing import Config
 
 
 # make liberal patterns for matching task names to classes
@@ -47,7 +48,7 @@ def make_nethack(
     full_env_name: str, cfg=None, env_config=None, render_mode: Optional[str] = None
 ) -> NLE:
     assert render_mode in [None, "human", "ansi", "full"]
-    return _make_nethack(
+    env = _make_nethack(
         name=full_env_name,
         save_ttyrec_every=cfg.save_ttyrec_every,
         savedir=cfg.savedir,
@@ -64,8 +65,11 @@ def make_nethack(
         penalty_mode=cfg.penalty_mode,
         penalty_step=cfg.penalty_step,
         penalty_time=cfg.penalty_time,
-        add_required_wrappers=True,
     )
+
+    if cfg is not None:
+        env = apply_required_wrappers(env, cfg)
+    return env
 
 
 def _make_nethack(
@@ -102,8 +106,6 @@ def _make_nethack(
     penalty_mode: str = "constant",
     penalty_step: float = -0.01,
     penalty_time: float = -0.0,
-    # below are for wrappers
-    add_required_wrappers: bool = True,
 ) -> NLE:
     """Constructs a new NetHack environment.
 
@@ -188,14 +190,11 @@ def _make_nethack(
             penalty_time=penalty_time,
         )
 
-    if add_required_wrappers:
-        env = apply_required_wrappers(env)
-
     return env
 
 
-def apply_required_wrappers(env: NLE) -> NLE:
+def apply_required_wrappers(env: NLE, cfg: Config) -> NLE:
     for wrapper in __global_order__:
         if wrapper in __required__:
-            env = wrapper(env)
+            env = wrapper(env, cfg)
     return env

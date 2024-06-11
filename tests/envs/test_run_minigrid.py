@@ -13,7 +13,7 @@ from nethack_curiosity.envs.minigrid.minigrid_env_params import (
 )
 from nethack_curiosity.models.minigrid_models import MinigridEncoder
 
-from tests.envs.minigrid_test_cfg import argv as minigrid_argv
+from tests.envs.minigrid_test_cfg import minigrid_argv as minigrid_argv
 
 
 def register_model_components():

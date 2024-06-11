@@ -11,7 +11,7 @@ from nethack_curiosity.envs.nethack.nethack_env_params import (
     nethack_env_override_defaults,
     add_nethack_env_args,
 )
-from tests.envs.minigrid_test_cfg import argv as nethack_argv
+from tests.envs.minigrid_test_cfg import minigrid_argv as nethack_argv
 
 
 def register_model_components():

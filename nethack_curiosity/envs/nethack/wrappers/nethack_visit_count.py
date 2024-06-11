@@ -4,9 +4,11 @@ import gymnasium as gym
 from gymnasium.spaces import Dict, Discrete
 import numpy as np
 
+from sample_factory.utils.typing import Config
+
 
 class NethackVisitCountWrapper(gym.Wrapper):
-    def __init__(self, env, hash_function=None):
+    def __init__(self, env, cfg: Config):
         super().__init__(env)
 
         assert env.observation_space.__class__ == Dict
@@ -17,7 +19,7 @@ class NethackVisitCountWrapper(gym.Wrapper):
         new_space.update([(k, old_space[k]) for k in old_space.keys()])
         self.observation_space = Dict(new_space)
 
-        self.hash = hash_function if hash_function is not None else self.define_hash()
+        self.hash = self.define_hash()
 
         self.visit_counts = {}
 

@@ -1,5 +1,5 @@
 import pytest
-from nethack_curiosity.envs.nethack.make_nethack import make_nethack, _make_nethack
+from nethack_curiosity.envs.nethack.make_nethack import _make_nethack
 
 
 def test_make_nethack():
@@ -24,7 +24,7 @@ def test_make_nethack():
 
     # Test with invalid task name
     with pytest.raises(ValueError):
-        _make_nethack("InvalidTaskName", False)
+        _make_nethack("InvalidTaskName")
 
 
 class TestMakeNetHack:
@@ -43,45 +43,45 @@ class TestMakeNetHack:
         challenge_names = ["challenge", "nethack_challenge", "NetHackChallenge"]
 
         for name in score_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackScore"
 
         for name in staircase_pet_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackStaircasePet"
 
         for name in staircase_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackStaircase"
 
         for name in oracle_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackOracle"
 
         for name in gold_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackGold"
 
         for name in eat_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackEat"
 
         for name in scout_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackScout"
 
         for name in challenge_names:
-            env = _make_nethack(name, False)
+            env = _make_nethack(name)
             assert env is not None
             assert env.__class__.__name__ == "NetHackChallenge"
 
     def test_invalid_name_parameter(self):
         with pytest.raises(ValueError):
-            _make_nethack("InvalidTaskName", False)
+            _make_nethack("InvalidTaskName")
