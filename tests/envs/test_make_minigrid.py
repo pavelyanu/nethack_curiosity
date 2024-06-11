@@ -1,8 +1,8 @@
 import pytest
 
 from tests.envs.run_env import run_for_n_few_steps
+from tests.envs.minigrid_test_cfg import make_minigrid_cfg
 from nethack_curiosity.envs.minigrid.make_minigrid import (
-    make_minigrid,
     _make_minigrid,
     make_multiroom,
     make_empty,
@@ -32,30 +32,32 @@ def test_make_minigrid():
     n, s = parse_multiroom_env_name(name)
     assert n == 1
     assert s == 4
-    _make_minigrid(name, False)
+    _make_minigrid(name)
 
     name = "multiroom-N2-S4-V0"
     n, s = parse_multiroom_env_name(name)
     assert n == 2
     assert s == 4
-    _make_minigrid(name, False)
+    _make_minigrid(name)
 
     name = "empty"
-    _make_minigrid(name, False)
+    _make_minigrid(name)
 
     with pytest.raises(NotImplementedError):
-        _make_minigrid("unknown", False)
+        _make_minigrid("unknown")
 
 
 def test_with_required_wrappers():
-    env = _make_minigrid("multiroom-1n-4s", False)
+    cfg = make_minigrid_cfg("multiroom-1n-4s")
+    env = _make_minigrid("multiroom-1n-4s")
     for wrapper in __required__:
-        env = wrapper(env)
+        env = wrapper(env, cfg)
     run_for_n_few_steps(env)
 
-    env = _make_minigrid("empty", False)
+    cfg = make_minigrid_cfg("empty")
+    env = _make_minigrid("empty")
     for wrapper in __required__:
-        env = wrapper(env)
+        env = wrapper(env, cfg)
     run_for_n_few_steps(env)
 
 
@@ -63,12 +65,26 @@ def test_with_optional_wrappers():
     if len(__global_order__) == len(__required__):
         pytest.skip("No optional wrappers to test")
 
-    env = _make_minigrid("multiroom-1n-4s", False)
+    # Test multiroom-1n-4s
+    cfg = make_minigrid_cfg("multiroom-1n-4s")
+    env = _make_minigrid("multiroom-1n-4s")
+
     for wrapper in __global_order__:
-        env = wrapper(env)
+        if wrapper in __required__:
+            env = wrapper(env, cfg)
+
+    for wrapper in __global_order__:
+        env = wrapper(env, cfg)
         run_for_n_few_steps(env)
 
-    env = _make_minigrid("empty", False)
+    # Test empty
+    cfg = make_minigrid_cfg("empty")
+    env = _make_minigrid("empty")
+
     for wrapper in __global_order__:
-        env = wrapper(env)
+        if wrapper in __required__:
+            env = wrapper(env, cfg)
+
+    for wrapper in __global_order__:
+        env = wrapper(env, cfg)
         run_for_n_few_steps(env)

@@ -5,6 +5,7 @@ from minigrid.envs.empty import EmptyEnv
 from minigrid.minigrid_env import MiniGridEnv
 
 from nethack_curiosity.envs.minigrid.wrappers import __required__, __global_order__
+from sample_factory.utils.typing import Config
 
 
 def make_empty(render_mode: Optional[str] = None) -> MiniGridEnv:
@@ -20,10 +21,13 @@ def make_multiroom(n: int, s: int, render_mode: Optional[str] = None) -> MiniGri
 def make_minigrid(
     full_env_name: str, cfg=None, env_config=None, render_mode: Optional[str] = None
 ) -> MiniGridEnv:
-    return _make_minigrid(full_env_name, add_required_wrappers=True)
+    env = _make_minigrid(full_env_name)
+    if cfg is not None:
+        env = apply_required_wrappers(env, cfg)
+    return env
 
 
-def _make_minigrid(name: str, add_required_wrappers: bool = True) -> MiniGridEnv:
+def _make_minigrid(name: str) -> MiniGridEnv:
     name = name.lower()
     env: MiniGridEnv
 
@@ -40,16 +44,13 @@ def _make_minigrid(name: str, add_required_wrappers: bool = True) -> MiniGridEnv
     else:
         raise NotImplementedError(f"Unknown environment: {name}")
 
-    if add_required_wrappers:
-        env = apply_required_wrappers(env)
-
     return env
 
 
-def apply_required_wrappers(env: MiniGridEnv) -> MiniGridEnv:
+def apply_required_wrappers(env: MiniGridEnv, cfg: Config) -> MiniGridEnv:
     for wrapper in __global_order__:
         if wrapper in __required__:
-            env = wrapper(env)
+            env = wrapper(env, cfg)
     return env
 
 

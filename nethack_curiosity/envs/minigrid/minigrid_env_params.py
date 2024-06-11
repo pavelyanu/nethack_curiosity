@@ -6,4 +6,9 @@ def minigrid_env_override_defaults(env: str, parser: ArgumentParser):
 
 
 def add_minigrid_env_args(env: str, parser: ArgumentParser):
-    pass
+    parser.add_argument(
+        "--observation_keys",
+        type=str,
+        nargs="+",
+        default=["image"],
+    )
