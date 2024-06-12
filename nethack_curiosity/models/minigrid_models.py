@@ -53,6 +53,11 @@ class MinigridEncoder(Encoder):
     def get_out_size(self) -> int:
         return 1024
 
+    def model_to_device(self, device):
+        for encoder in self.encoder_dict.values():
+            encoder.to(device)
+        self.fc.to(device)
+
 
 class MinigridImageHead(Encoder):
     def __init__(self, cfg: Config, obs_space: Space):

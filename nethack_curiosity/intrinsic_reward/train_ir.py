@@ -12,13 +12,13 @@ from sample_factory.cfg.arguments import parse_sf_args, parse_full_cfg
 from nethack_curiosity.intrinsic_reward.intrinsic_reward_algo.intrinsic_reward_learner_worker import (
     IntrinsicRewardLearnerWorker,
 )
-from nethack_curiosity.intrinsic_reward.intrinsic_reward_params.intrinsic_reward_params import (
+from nethack_curiosity.intrinsic_reward.intrinsic_reward_params import (
     add_intrinsic_reward_args,
     intrinsic_reward_override_defaults,
 )
 
 
-def parse_ir_args(argv=None, evaluation=False):
+def ir_parse_full_cfg(argv=None, evaluation=False):
     parser: ArgumentParser
     partial_cfg: Config
     parser, partial_cfg = parse_sf_args(argv, evaluation)
@@ -26,6 +26,15 @@ def parse_ir_args(argv=None, evaluation=False):
     intrinsic_reward_override_defaults(partial_cfg.env, parser)
     final_cfg = parse_full_cfg(parser, argv)
     return final_cfg
+
+
+def parse_ir_args(argv=None):
+    parser: ArgumentParser
+    partial_cfg: Config
+    parser, partial_cfg = parse_sf_args(argv)
+    add_intrinsic_reward_args(partial_cfg.env, parser)
+    intrinsic_reward_override_defaults(partial_cfg.env, parser)
+    return parser, partial_cfg
 
 
 def _make_learner(self, event_loop, policy_id: PolicyID, batcher: Batcher):

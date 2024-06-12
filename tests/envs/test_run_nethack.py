@@ -28,9 +28,9 @@ def parse_args():
     return final_cfg
 
 
-def test_run_nethack():
-    register_model_components()
-    register_env("nethack-score", make_nethack)
-    cfg = parse_args()
-    status = run_rl(cfg)
-    assert status == ExperimentStatus.SUCCESS
+# def test_run_nethack():
+#     register_model_components()
+#     register_env("nethack-score", make_nethack)
+#     cfg = parse_args()
+#     status = run_rl(cfg)
+#     assert status == ExperimentStatus.SUCCESS

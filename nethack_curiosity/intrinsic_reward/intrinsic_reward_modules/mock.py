@@ -13,4 +13,4 @@ class MockIntrinsicRewardModule(IntrinsicRewardModule):
         return mb.rewards_cpu.new_zeros(mb.rewards_cpu.size())
 
     def loss(self, mb: AttrDict) -> Tensor:
-        return torch.zeros(1, device=mb.rewards_cpu.device)
+        return torch.zeros(torch.Size([]), device=mb.rewards_cpu.device)

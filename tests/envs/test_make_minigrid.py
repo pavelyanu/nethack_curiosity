@@ -6,7 +6,6 @@ from nethack_curiosity.envs.minigrid.make_minigrid import (
     _make_minigrid,
     make_multiroom,
     make_empty,
-    parse_multiroom_env_name,
     __required__,
     __global_order__,
 )
@@ -28,19 +27,17 @@ def test_make_empty():
 
 
 def test_make_minigrid():
+
     name = "multiroom-1n-4s"
-    n, s = parse_multiroom_env_name(name)
-    assert n == 1
-    assert s == 4
     _make_minigrid(name)
 
     name = "multiroom-N2-S4-V0"
-    n, s = parse_multiroom_env_name(name)
-    assert n == 2
-    assert s == 4
     _make_minigrid(name)
 
     name = "empty"
+    _make_minigrid(name)
+
+    name = "keycorridor-5x5-v0"
     _make_minigrid(name)
 
     with pytest.raises(NotImplementedError):

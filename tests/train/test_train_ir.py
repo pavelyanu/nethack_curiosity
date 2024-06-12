@@ -6,27 +6,27 @@ from tests.train.empty_argv import argv
 from nethack_curiosity.intrinsic_reward.train_ir import (
     make_ir_runner,
     run_ir_rl,
-    parse_ir_args,
+    ir_parse_full_cfg,
 )
 from tests.train.register_test_environments import register_empty_env
 
 
 def test_parse_ir_args():
     evaluation = False
-    cfg = parse_ir_args(argv, evaluation)
+    cfg = ir_parse_full_cfg(argv, evaluation)
     assert cfg is not None
     assert cfg.intrinsic_reward_module == "mock"
 
 
 def test_make_ir_runner():
-    cfg = parse_ir_args(argv)
+    cfg = ir_parse_full_cfg(argv)
     cfg, runner = make_ir_runner(cfg)
     assert runner is not None
 
 
 def test_ir_runner_init():
     register_empty_env()
-    cfg = parse_ir_args(argv)
+    cfg = ir_parse_full_cfg(argv)
     cfg, runner = make_ir_runner(cfg)
     status = runner.init()
     assert status == ExperimentStatus.SUCCESS

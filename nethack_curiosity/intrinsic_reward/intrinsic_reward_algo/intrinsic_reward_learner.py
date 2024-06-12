@@ -166,21 +166,21 @@ class IntrinsicRewardLearner(Learner):
         #############
         # NO CHANGE #
         #############
-        return super().checkpoint_dir(cfg, policy_id)
+        return Learner.checkpoint_dir(cfg, policy_id)
 
     @staticmethod
     def get_checkpoints(checkpoints_dir, pattern="checkpoint_*"):
         #############
         # NO CHANGE #
         #############
-        return super().get_checkpoints(checkpoints_dir, pattern)
+        return Learner.get_checkpoints(checkpoints_dir, pattern)
 
     @staticmethod
     def load_checkpoint(checkpoints, device):
         #############
         # NO CHANGE #
         #############
-        return super().load_checkpoint(checkpoints, device)
+        return Learner.load_checkpoint(checkpoints, device)
 
     def _load_state(self, checkpoint_dict, load_progress=True):
         if load_progress:
@@ -294,7 +294,7 @@ class IntrinsicRewardLearner(Learner):
         #############
         # NO CHANGE #
         #############
-        return super()._policy_loss(
+        return Learner._policy_loss(
             ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids
         )
 
@@ -372,7 +372,7 @@ class IntrinsicRewardLearner(Learner):
         #############
         # NO CHANGE #
         #############
-        return super()._get_minibatch(buffer, indices)
+        return Learner._get_minibatch(buffer, indices)
 
     def _calculate_losses(self, mb: AttrDict, num_invalids: int) -> Tuple[
         ActionDistribution,
