@@ -19,7 +19,7 @@ def make_nethack_cfg(env: str) -> Config:
     args = ["--env", env]
     args.extend(nethack_arvg)
     parser, partial_cfg = parse_sf_args(args)
-    add_nethack_env_args(env, parser)
-    nethack_env_override_defaults(env, parser)
+    add_nethack_env_args(env, parser, testing=True)
+    nethack_env_override_defaults(env, parser, testing=True)
     final_cfg = parse_full_cfg(parser, args)
     return final_cfg

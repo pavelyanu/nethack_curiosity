@@ -16,7 +16,6 @@ def test_make_nethack():
         penalty_mode="exp",
         penalty_step=-0.02,
         penalty_time=0.1,
-        add_required_wrappers=False,
     )
     assert env.penalty_mode == "exp"
     assert env.penalty_step == -0.02

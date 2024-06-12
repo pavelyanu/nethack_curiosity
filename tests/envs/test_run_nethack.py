@@ -22,8 +22,8 @@ def parse_args():
     argv = ["--env", "nethack-score"]
     argv.extend(nethack_argv)
     parser, partial_cfg = parse_sf_args(argv)
-    add_nethack_env_args("nethack-score", parser)
-    nethack_env_override_defaults("nethack-score", parser)
+    add_nethack_env_args("nethack-score", parser, testing=True)
+    nethack_env_override_defaults("nethack-score", parser, testing=True)
     final_cfg = parse_full_cfg(parser, argv)
     return final_cfg
 

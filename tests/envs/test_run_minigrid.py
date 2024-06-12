@@ -24,8 +24,8 @@ def parse_args():
     argv = ["--env", "minigrid-empty"]
     argv.extend(minigrid_argv)
     parser, partial_cfg = parse_sf_args(argv)
-    add_minigrid_env_args("minigrid-empty", parser)
-    minigrid_env_override_defaults("minigrid-empty", parser)
+    add_minigrid_env_args("minigrid-empty", parser, testing=True)
+    minigrid_env_override_defaults("minigrid-empty", parser, testing=True)
     final_cfg = parse_full_cfg(parser, argv)
     return final_cfg
 

@@ -1,11 +1,13 @@
 from argparse import ArgumentParser
 
 
-def nethack_env_override_defaults(env: str, parser: ArgumentParser):
+def nethack_env_override_defaults(
+    env: str, parser: ArgumentParser, testing: bool = False
+):
     pass
 
 
-def add_nethack_env_args(env: str, parser: ArgumentParser):
+def add_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = False):
     parser.add_argument(
         "--save_ttyrec_every",
         type=int,

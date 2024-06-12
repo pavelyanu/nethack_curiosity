@@ -1,7 +1,11 @@
 from argparse import ArgumentParser
 
 
-def minigrid_env_override_defaults(env: str, parser: ArgumentParser):
+def minigrid_env_override_defaults(
+    env: str, parser: ArgumentParser, testing: bool = False
+):
+    if testing:
+        return
     parser.set_defaults(
         num_workers=20,
         num_envs_per_worker=2,
@@ -18,7 +22,7 @@ def minigrid_env_override_defaults(env: str, parser: ArgumentParser):
     )
 
 
-def add_minigrid_env_args(env: str, parser: ArgumentParser):
+def add_minigrid_env_args(env: str, parser: ArgumentParser, testing: bool = False):
     parser.add_argument(
         "--observation_keys",
         type=str,
