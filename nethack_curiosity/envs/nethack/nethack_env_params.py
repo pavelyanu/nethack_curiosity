@@ -4,7 +4,9 @@ from argparse import ArgumentParser
 def nethack_env_override_defaults(
     env: str, parser: ArgumentParser, testing: bool = False
 ):
-    pass
+    parser.set_defaults(
+        env_type="nethack",
+    )
 
 
 def add_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = False):

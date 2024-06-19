@@ -20,12 +20,18 @@ class MinigridEncoder(Encoder):
         # noinspection PyTypeChecker
         obs_space: Dict = obs_space
 
-        self.encoder_dict = {}
+        self.encoder_dict = nn.ModuleDict()
+
+        self.image_encoder_cls: type
+        if cfg.image_head == "conv":
+            self.image_encoder_cls = MinigridImageHead
+        elif cfg.image_head == "flat":
+            self.image_encoder_cls = MinigridImageFlatHead
 
         for key in self.observation_keys:
             assert key in obs_space.keys()
             if key == "image":
-                self.encoder_dict[key] = MinigridImageHead(cfg, obs_space)
+                self.encoder_dict[key] = self.image_encoder_cls(cfg, obs_space)
             elif key == "direction":
                 self.encoder_dict[key] = MinigridDirectionHead(cfg, obs_space)
             elif key == "mission":
@@ -52,6 +58,60 @@ class MinigridEncoder(Encoder):
 
     def get_out_size(self) -> int:
         return 1024
+
+    def model_to_device(self, device):
+        for encoder in self.encoder_dict.values():
+            encoder.to(device)
+        self.fc.to(device)
+
+
+class MinigridIntrinsicRewardEncoder(Encoder):
+    def __init__(self, cfg: Config, obs_space: Space):
+        super().__init__(cfg)
+
+        assert cfg.__contains__("observation_keys")
+        self.observation_keys = cfg.observation_keys
+
+        assert obs_space.__class__ == Dict
+        # noinspection PyTypeChecker
+        obs_space: Dict = obs_space
+
+        self.encoder_dict = nn.ModuleDict()
+
+        self.image_encoder_cls: type
+        if cfg.ir_image_head == "conv":
+            self.image_encoder_cls = MinigridImageHead
+        elif cfg.ir_image_head == "flat":
+            self.image_encoder_cls = MinigridImageFlatHead
+
+        for key in self.observation_keys:
+            assert key in obs_space.keys()
+            if key == "image":
+                self.encoder_dict[key] = self.image_encoder_cls(cfg, obs_space)
+            elif key == "direction":
+                self.encoder_dict[key] = MinigridDirectionHead(cfg, obs_space)
+            elif key == "mission":
+                self.encoder_dict[key] = MinigridMissionHead(cfg, obs_space)
+            else:
+                raise NotImplementedError
+
+        encoder_out_size = sum(
+            [encoder.get_out_size() for encoder in self.encoder_dict.values()]
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(encoder_out_size, 256),
+            nn.ReLU(),
+        )
+
+    def forward(self, obs):
+        x = torch.cat(
+            [encoder(obs[key]) for key, encoder in self.encoder_dict.items()], dim=1
+        )
+        return self.fc(x)
+
+    def get_out_size(self) -> int:
+        return 256
 
     def model_to_device(self, device):
         for encoder in self.encoder_dict.values():
@@ -99,6 +159,35 @@ class MinigridImageHead(Encoder):
         out_w = out_h
 
         return out_h * out_w * 512
+
+
+class MinigridImageFlatHead(Encoder):
+    def __init__(self, cfg: Config, obs_space: Space):
+        super().__init__(cfg)
+
+        assert obs_space.__class__ == Dict
+        # noinspection PyTypeChecker
+        obs_space: Dict = obs_space
+
+        assert "image" in obs_space.keys()
+        assert obs_space["image"].__class__ == Box
+        # noinspection PyTypeChecker
+        image: Box = obs_space["image"]
+
+        self.H, self.W, self.C = image.shape
+
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(self.H * self.W * self.C, 128),
+            nn.ELU(),
+        )
+
+    def forward(self, x):
+        x = self.fc(x)
+        return x
+
+    def get_out_size(self) -> int:
+        return 128
 
 
 class MinigridDirectionHead(Encoder):

@@ -7,19 +7,14 @@ def minigrid_env_override_defaults(
     if testing:
         return
     parser.set_defaults(
-        num_workers=20,
-        num_envs_per_worker=2,
-        # train_for_env_steps=500000000,
-        train_for_env_steps=1000000,
-        # batch_size=32,
-        # rollout=100,
-        # recurrence=-1,
-        # max_grad_norm=40,
-        # exploration_loss="entropy",
-        # exploration_loss_coeff=0.001,
-        # value_loss_coeff=0.5,
-        # gamma=0.99,
-        # learning_rate=0.0001,
+        # train_for_env_steps=50000000,
+        num_workers=16,
+        num_envs_per_worker=32,
+        worker_num_splits=2,
+        env_type="minigrid",
+        # with_wandb=True,
+        # wandb_user="pyanushonak",
+        # wandb_project="ppo_curiosity",
     )
 
 
@@ -55,4 +50,18 @@ def add_minigrid_env_args(env: str, parser: ArgumentParser, testing: bool = Fals
         "--minigrid_row_num",
         type=int,
         default=5,
+    )
+
+    parser.add_argument(
+        "--image_head",
+        type=str,
+        default="conv",
+        choices=["conv", "flat"],
+    )
+
+    parser.add_argument(
+        "--ir_image_head",
+        type=str,
+        default="conv",
+        choices=["conv", "flat"],
     )

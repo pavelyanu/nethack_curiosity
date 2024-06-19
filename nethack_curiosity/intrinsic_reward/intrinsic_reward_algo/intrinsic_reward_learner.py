@@ -8,10 +8,12 @@ from torch import Tensor
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
+from sample_factory.algo.utils.rl_utils import gae_advantages
 from sample_factory.algo.utils.shared_buffers import policy_device
-from sample_factory.algo.utils.tensor_dict import TensorDict
+from sample_factory.algo.utils.tensor_dict import TensorDict, shallow_recursive_copy
 from sample_factory.algo.utils.torch_utils import to_scalar, synchronize, masked_select
 from sample_factory.model.actor_critic import create_actor_critic
+from sample_factory.utils.dicts import iterate_recursively
 from sample_factory.utils.timing import Timing
 from sample_factory.algo.utils.action_distributions import (
     is_continuous_action_space,
@@ -35,9 +37,6 @@ from sample_factory.algo.learning.learner import (
 from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.base import (
     IntrinsicRewardModule,
 )
-from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.mock import (
-    MockIntrinsicRewardModule,
-)
 from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.make_intrinsic_reward_module import (
     make_intrinsic_reward_module,
 )
@@ -54,6 +53,7 @@ class IntrinsicRewardLearner(Learner):
     ):
         super().__init__(cfg, env_info, policy_versions_tensor, policy_id, param_server)
         self.ir_module: Optional[IntrinsicRewardModule] = None
+        self.ir_weight = cfg.intrinsic_reward_weight
         self.timing = Timing(name=f"IntrinsicRewardLearner {policy_id} profile")
 
     def init(self) -> InitModelData:
@@ -104,7 +104,7 @@ class IntrinsicRewardLearner(Learner):
         # MY CODE BLOCK #
         #################
         log.debug("Initializing intrinsic reward module")
-        self.ir_module = make_intrinsic_reward_module(self.cfg, self.env_info)
+        self.ir_module = make_intrinsic_reward_module(self.cfg, self.env_info.obs_space)
         log.debug("Intrinsic reward module initialized")
         self.ir_module.model_to_device(self.device)
         #################
@@ -474,11 +474,11 @@ class IntrinsicRewardLearner(Learner):
                 #################
                 # MY CODE BLOCK #
                 #################
-                with timing.add_time("intrinsic_rewards computation"):
-                    intrinsic_rewards = self.ir_module.get_intrinsic_rewards(mb)
-                rewards_before_intrinsic_max = mb.rewards_cpu.max()
-                rewards_before_intrinsic_min = mb.rewards_cpu.min()
-                mb.rewards_cpu += intrinsic_rewards
+                # with timing.add_time("intrinsic_rewards computation"):
+                #     intrinsic_rewards = self.ir_module.get_intrinsic_rewards(mb)
+                # rewards_before_intrinsic_max = mb.rewards_cpu.max()
+                # rewards_before_intrinsic_min = mb.rewards_cpu.min()
+                # mb.rewards_cpu += intrinsic_rewards.to(mb.rewards_cpu.device)
                 #################
 
                 with timing.add_time("calculate_losses"):
@@ -666,31 +666,146 @@ class IntrinsicRewardLearner(Learner):
         ###############
         stats = super()._record_summaries(train_loop_vars)
         stats.intrinsic_rewards_loss = train_loop_vars.intrinsic_rewards_loss
-        stats.rewards_before_intrinsic_max = (
-            train_loop_vars.rewards_before_intrinsic_max
-        )
-        stats.rewards_before_intrinsic_min = (
-            train_loop_vars.rewards_before_intrinsic_min
-        )
-        stats.intrinsic_rewards_max = train_loop_vars.intrinsic_rewards.max()
-        stats.intrinsic_rewards_min = train_loop_vars.intrinsic_rewards.min()
+        intrinsic_rewards = train_loop_vars.mb.intrinsic_rewards
+        stats.intrinsic_rewards_mean = intrinsic_rewards.mean()
+        stats.intrinsic_rewards_max = intrinsic_rewards.max()
+        stats.intrinsic_rewards_min = intrinsic_rewards.min()
         return stats
 
     def _prepare_batch(self, batch: TensorDict) -> Tuple[TensorDict, int, int]:
-        #############
-        # NO CHANGE #
-        #############
-        return super()._prepare_batch(batch)
+        with torch.no_grad():
+            # create a shallow copy so we can modify the dictionary
+            # we still reference the same buffers though
+            buff = shallow_recursive_copy(batch)
+
+            # ignore experience from other agents (i.e. on episode boundary) and from inactive agents
+            valids: Tensor = buff["policy_id"] == self.policy_id
+            # ignore experience that was older than the threshold even before training started
+            curr_policy_version: int = self.train_step
+            buff["valids"][:, :-1] = valids & (
+                curr_policy_version - buff["policy_version"] < self.cfg.max_policy_lag
+            )
+            # for last T+1 step, we want to use the validity of the previous step
+            buff["valids"][:, -1] = buff["valids"][:, -2]
+
+            # ensure we're in train mode so that normalization statistics are updated
+            if not self.actor_critic.training:
+                self.actor_critic.train()
+
+            buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
+            del buff["obs"]  # don't need non-normalized obs anymore
+
+            # calculate estimated value for the next step (T+1)
+            normalized_last_obs = buff["normalized_obs"][:, -1]
+            next_values = self.actor_critic(
+                normalized_last_obs, buff["rnn_states"][:, -1], values_only=True
+            )["values"]
+            buff["values"][:, -1] = next_values
+
+            if self.cfg.normalize_returns:
+                # Since our value targets are normalized, the values will also have normalized statistics.
+                # We need to denormalize them before using them for GAE caculation and value bootstrapping.
+                # rl_games PPO uses a similar approach, see:
+                # https://github.com/Denys88/rl_games/blob/7b5f9500ee65ae0832a7d8613b019c333ecd932c/rl_games/algos_torch/models.py#L51
+                denormalized_values = buff[
+                    "values"
+                ].clone()  # need to clone since normalizer is in-place
+                self.actor_critic.returns_normalizer(
+                    denormalized_values, denormalize=True
+                )
+            else:
+                # values are not normalized in this case, so we can use them as is
+                denormalized_values = buff["values"]
+
+            #################
+            # MY CODE BLOCK #
+            #################
+            with self.timing.add_time("intrinsic_rewards computation"):
+                intrinsic_output = self.ir_module.compute_intrinsic_rewards(
+                    buff, leading_dims=2
+                )
+                intrinsic_rewards = intrinsic_output["intrinsic_rewards"]
+                buff["rewards"] += (
+                    intrinsic_rewards.to(buff["rewards"].device) * self.ir_weight
+                )
+                for key, value in intrinsic_output.items():
+                    buff[key] = value
+            #################
+
+            if self.cfg.value_bootstrap:
+                # Value bootstrapping is a technique that reduces the surprise for the critic in case
+                # we're ending the episode by timeout. Intuitively, in this case the cumulative return for the last step
+                # should not be zero, but rather what the critic expects. This improves learning in many envs
+                # because otherwise the critic cannot predict the abrupt change in rewards in a timed-out episode.
+                # What we really want here is v(t+1) which we don't have because we don't have obs(t+1) (since
+                # the episode ended). Using v(t) is an approximation that requires that rew(t) can be generally ignored.
+
+                # Multiply by both time_out and done flags to make sure we count only timeouts in terminal states.
+                # There was a bug in older versions of isaacgym where timeouts were reported for non-terminal states.
+                buff["rewards"].add_(
+                    self.cfg.gamma
+                    * denormalized_values[:, :-1]
+                    * buff["time_outs"]
+                    * buff["dones"]
+                )
+
+            if not self.cfg.with_vtrace:
+                # calculate advantage estimate (in case of V-trace it is done separately for each minibatch)
+                buff["advantages"] = gae_advantages(
+                    buff["rewards"],
+                    buff["dones"],
+                    denormalized_values,
+                    buff["valids"],
+                    self.cfg.gamma,
+                    self.cfg.gae_lambda,
+                )
+                # here returns are not normalized yet, so we should use denormalized values
+                buff["returns"] = (
+                    buff["advantages"]
+                    + buff["valids"][:, :-1] * denormalized_values[:, :-1]
+                )
+
+            # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
+            for key in ["normalized_obs", "rnn_states", "values", "valids"]:
+                buff[key] = buff[key][:, :-1]
+
+            dataset_size = buff["actions"].shape[0] * buff["actions"].shape[1]
+            for d, k, v in iterate_recursively(buff):
+                # collapse first two dimensions (batch and time) into a single dimension
+                d[k] = v.reshape((dataset_size,) + tuple(v.shape[2:]))
+
+            buff["dones_cpu"] = buff["dones"].to(
+                "cpu", copy=True, dtype=torch.float, non_blocking=True
+            )
+            buff["rewards_cpu"] = buff["rewards"].to(
+                "cpu", copy=True, dtype=torch.float, non_blocking=True
+            )
+
+            # return normalization parameters are only used on the learner, no need to lock the mutex
+            if self.cfg.normalize_returns:
+                self.actor_critic.returns_normalizer(buff["returns"])  # in-place
+
+            num_invalids = dataset_size - buff["valids"].sum().item()
+            if num_invalids > 0:
+                invalid_fraction = num_invalids / dataset_size
+                if invalid_fraction > 0.5:
+                    log.warning(
+                        f"{self.policy_id=} batch has {invalid_fraction:.2%} of invalid samples"
+                    )
+
+                # invalid action values can cause problems when we calculate logprobs
+                # here we set them to 0 just to be safe
+                invalid_indices = (buff["valids"] == 0).nonzero().squeeze()
+                buff["actions"][invalid_indices] = 0
+                # likewise, some invalid values of log_prob_actions can cause NaNs or infs
+                buff["log_prob_actions"][
+                    invalid_indices
+                ] = -1  # -1 seems like a safe value
+
+            return buff, dataset_size, num_invalids
 
     def train(self, batch: TensorDict) -> Optional[Dict]:
         #############
         # NO CHANGE #
         #############
         return super().train(batch)
-
-    def _make_intrinsic_reward_module(self, cfg: Config) -> IntrinsicRewardModule:
-        module_name = cfg.intrinsic_reward_module
-        if module_name == "mock":
-            return MockIntrinsicRewardModule(cfg, self.env_info)
-        else:
-            raise NotImplementedError(f"Unknown intrinsic reward module: {module_name}")
