@@ -63,4 +63,4 @@ ipython_config.py
 .pyre/
 
 # Artifacts
-train_dir*/
+*train_dir*
