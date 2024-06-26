@@ -5,6 +5,10 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from sample_factory.algo.learning.rnn_utils import (
+    build_rnn_inputs,
+    build_core_out_from_seq,
+)
 from sample_factory.algo.utils.env_info import EnvInfo
 from sample_factory.algo.utils.model_sharing import ParameterServer
 from sample_factory.algo.utils.optimizers import Lamb
@@ -384,24 +388,160 @@ class IntrinsicRewardLearner(Learner):
         Tensor,
         Dict,
     ]:
-        ###########################################
-        # Added another tensor to the return type #
-        ###########################################
+        ################################################
+        # I ADDED ADDITIONAL TENSOR TO THE RETURN TYPE #
+        ################################################
+        with torch.no_grad(), self.timing.add_time("losses_init"):
+            recurrence: int = self.cfg.recurrence
 
-        #########################
-        # EVERYTHING IS MY CODE #
-        #########################
-        intrinsic_rewards_loss = self.ir_module.loss(mb)
-        (
-            action_distribution,
-            policy_loss,
-            exploration_loss,
-            kl_old,
-            kl_loss,
-            value_loss,
-            loss_summaries,
-        ) = super()._calculate_losses(mb, num_invalids)
-        loss_summaries["intrinsic_rewards_loss"] = intrinsic_rewards_loss.item()
+            # PPO clipping
+            clip_ratio_high = 1.0 + self.cfg.ppo_clip_ratio  # e.g. 1.1
+            # this still works with e.g. clip_ratio = 2, while PPO's 1-r would give negative ratio
+            clip_ratio_low = 1.0 / clip_ratio_high
+            clip_value = self.cfg.ppo_clip_value
+
+            valids = mb.valids
+
+        # calculate policy head outside of recurrent loop
+        with self.timing.add_time("forward_head"):
+            head_outputs = self.actor_critic.forward_head(mb.normalized_obs)
+            minibatch_size: int = head_outputs.size(0)
+
+        # initial rnn states
+        with self.timing.add_time("bptt_initial"):
+            if self.cfg.use_rnn:
+                # this is the only way to stop RNNs from backpropagating through invalid timesteps
+                # (i.e. experience collected by another policy)
+                done_or_invalid = torch.logical_or(mb.dones_cpu, ~valids.cpu()).float()
+                head_output_seq, rnn_states, inverted_select_inds = build_rnn_inputs(
+                    head_outputs,
+                    done_or_invalid,
+                    mb.rnn_states,
+                    recurrence,
+                )
+            else:
+                rnn_states = mb.rnn_states[::recurrence]
+
+        # calculate RNN outputs for each timestep in a loop
+        with self.timing.add_time("bptt"):
+            if self.cfg.use_rnn:
+                with self.timing.add_time("bptt_forward_core"):
+                    core_output_seq, _ = self.actor_critic.forward_core(
+                        head_output_seq, rnn_states
+                    )
+                core_outputs = build_core_out_from_seq(
+                    core_output_seq, inverted_select_inds
+                )
+                del core_output_seq
+            else:
+                core_outputs, _ = self.actor_critic.forward_core(
+                    head_outputs, rnn_states
+                )
+
+            del head_outputs
+
+        num_trajectories = minibatch_size // recurrence
+        assert core_outputs.shape[0] == minibatch_size
+
+        with self.timing.add_time("tail"):
+            # calculate policy tail outside of recurrent loop
+            result = self.actor_critic.forward_tail(
+                core_outputs, values_only=False, sample_actions=False
+            )
+            action_distribution = self.actor_critic.action_distribution()
+            log_prob_actions = action_distribution.log_prob(mb.actions)
+            ratio = torch.exp(log_prob_actions - mb.log_prob_actions)  # pi / pi_old
+
+            # super large/small values can cause numerical problems and are probably noise anyway
+            ratio = torch.clamp(ratio, 0.05, 20.0)
+
+            values = result["values"].squeeze()
+
+            del core_outputs
+
+        # these computations are not the part of the computation graph
+        with torch.no_grad(), self.timing.add_time("advantages_returns"):
+            #################
+            # MY CODE BLOCK #
+            #################
+            if self.cfg.with_vtrace:
+                raise NotImplementedError(
+                    "V-trace is not supported for intrinsic reward learner"
+                )
+            adv = mb.advantages
+            targets = mb.returns
+
+            adv_std, adv_mean = torch.std_mean(masked_select(adv, valids, num_invalids))
+            adv = (adv - adv_mean) / torch.clamp_min(
+                adv_std, 1e-7
+            )  # normalize advantage
+
+            ir_adv = mb.intrinsic_advantages
+            ir_targets = mb.intrinsic_returns
+
+            ir_adv_std, ir_adv_mean = torch.std_mean(
+                masked_select(ir_adv, valids, num_invalids)
+            )
+            ir_adv = (ir_adv - ir_adv_mean) / torch.clamp_min(
+                ir_adv_std, 1e-7
+            )  # normalize advantage
+
+            pre_ir_adv = adv
+            pre_ir_targets = targets
+
+            adv = adv + self.ir_weight * ir_adv
+            targets = targets + self.ir_weight * ir_targets
+            #################
+
+        with self.timing.add_time("losses"):
+            # noinspection PyTypeChecker
+            policy_loss = self._policy_loss(
+                ratio, adv, clip_ratio_low, clip_ratio_high, valids, num_invalids
+            )
+            exploration_loss = self.exploration_loss_func(
+                action_distribution, valids, num_invalids
+            )
+            kl_old, kl_loss = self.kl_loss_func(
+                self.actor_critic.action_space,
+                mb.action_logits,
+                action_distribution,
+                valids,
+                num_invalids,
+            )
+            old_values = mb["values"]
+            value_loss = self._value_loss(
+                values, old_values, targets, clip_value, valids, num_invalids
+            )
+
+        #################
+        # MY CODE BLOCK #
+        #################
+        with self.timing.add_time("intrinsic_rewards_loss"):
+            intrinsic_rewards_loss = self.ir_module.loss(mb)
+        #################
+
+        loss_summaries = dict(
+            ratio=ratio,
+            clip_ratio_low=clip_ratio_low,
+            clip_ratio_high=clip_ratio_high,
+            values=result["values"],
+            adv=adv,
+            adv_std=adv_std,
+            adv_mean=adv_mean,
+            #################
+            # MY CODE BLOCK #
+            #################
+            intrinsic_rewards_loss=intrinsic_rewards_loss,
+            intrinsic_adv=ir_adv,
+            intrinsic_adv_std=ir_adv_std,
+            intrinsic_adv_mean=ir_adv_mean,
+            pre_ir_adv=pre_ir_adv,
+            pre_ir_targets=pre_ir_targets,
+            pre_ir_adv_mean=adv_mean,
+            pre_ir_adv_std=adv_std,
+            #################
+        )
+
         return (
             action_distribution,
             policy_loss,
@@ -409,7 +549,11 @@ class IntrinsicRewardLearner(Learner):
             kl_old,
             kl_loss,
             value_loss,
+            #################
+            # MY CODE BLOCK #
+            #################
             intrinsic_rewards_loss,
+            #################
             loss_summaries,
         )
 
@@ -434,6 +578,9 @@ class IntrinsicRewardLearner(Learner):
                 assert (
                     self.cfg.recurrence == self.cfg.rollout and self.cfg.recurrence > 1
                 ), "V-trace requires to recurrence and rollout to be equal"
+                raise NotImplementedError(
+                    "V-trace is not supported for intrinsic reward learner"
+                )
 
             num_sgd_steps = 0
             stats_and_summaries: Optional[AttrDict] = None
@@ -470,16 +617,6 @@ class IntrinsicRewardLearner(Learner):
 
                     # enable syntactic sugar that allows us to access dict's keys as object attributes
                     mb = AttrDict(mb)
-
-                #################
-                # MY CODE BLOCK #
-                #################
-                # with timing.add_time("intrinsic_rewards computation"):
-                #     intrinsic_rewards = self.ir_module.get_intrinsic_rewards(mb)
-                # rewards_before_intrinsic_max = mb.rewards_cpu.max()
-                # rewards_before_intrinsic_min = mb.rewards_cpu.min()
-                # mb.rewards_cpu += intrinsic_rewards.to(mb.rewards_cpu.device)
-                #################
 
                 with timing.add_time("calculate_losses"):
                     (
@@ -665,11 +802,17 @@ class IntrinsicRewardLearner(Learner):
         # ALL MY CODE #
         ###############
         stats = super()._record_summaries(train_loop_vars)
-        stats.intrinsic_rewards_loss = train_loop_vars.intrinsic_rewards_loss
-        intrinsic_rewards = train_loop_vars.mb.intrinsic_rewards
+        stats.intrinsic_rewards_loss = train_loop_vars.intrinsic_rewards_loss.detach()
+        intrinsic_rewards = train_loop_vars.mb.intrinsic_rewards.detach()
         stats.intrinsic_rewards_mean = intrinsic_rewards.mean()
         stats.intrinsic_rewards_max = intrinsic_rewards.max()
         stats.intrinsic_rewards_min = intrinsic_rewards.min()
+        stats.pre_intrinsic_adv_mean = train_loop_vars.pre_ir_adv_mean.detach()
+        stats.pre_intrinsic_adv_std = train_loop_vars.pre_ir_adv_std.detach()
+        stats.intrinsic_adv_mean = train_loop_vars.intrinsic_adv_mean.detach()
+        stats.intrinsic_adv_std = train_loop_vars.intrinsic_adv_std.detach()
+        stats.adv_mean = stats.intrinsic_adv_mean + stats.pre_intrinsic_adv_mean
+        stats.adv_std = stats.intrinsic_adv_std + stats.pre_intrinsic_adv_std
         return stats
 
     def _prepare_batch(self, batch: TensorDict) -> Tuple[TensorDict, int, int]:
@@ -717,20 +860,21 @@ class IntrinsicRewardLearner(Learner):
                 # values are not normalized in this case, so we can use them as is
                 denormalized_values = buff["values"]
 
-            #################
-            # MY CODE BLOCK #
-            #################
-            with self.timing.add_time("intrinsic_rewards computation"):
-                intrinsic_output = self.ir_module.compute_intrinsic_rewards(
-                    buff, leading_dims=2
-                )
-                intrinsic_rewards = intrinsic_output["intrinsic_rewards"]
-                buff["rewards"] += (
-                    intrinsic_rewards.to(buff["rewards"].device) * self.ir_weight
-                )
-                for key, value in intrinsic_output.items():
-                    buff[key] = value
-            #################
+        #################
+        # MY CODE BLOCK #
+        #################
+        with self.timing.add_time("intrinsic_rewards computation"):
+            if not self.ir_module.training:
+                self.ir_module.train()
+            intrinsic_output = self.ir_module(buff, leading_dims=2)
+            intrinsic_rewards = intrinsic_output["intrinsic_rewards"]
+            # buff["rewards"] += (
+            #     intrinsic_rewards.to(buff["rewards"].device) * self.ir_weight
+            # )
+            for key, value in intrinsic_output.items():
+                buff[key] = value
+        #################
+        with torch.no_grad():
 
             if self.cfg.value_bootstrap:
                 # Value bootstrapping is a technique that reduces the surprise for the critic in case
@@ -765,6 +909,24 @@ class IntrinsicRewardLearner(Learner):
                     + buff["valids"][:, :-1] * denormalized_values[:, :-1]
                 )
 
+                #################
+                # MY CODE BLOCK #
+                #################
+                buff["intrinsic_advantages"] = gae_advantages(
+                    intrinsic_rewards,
+                    buff["dones"],
+                    denormalized_values,
+                    buff["valids"],
+                    self.cfg.gamma,
+                    self.cfg.gae_lambda,
+                )
+
+                buff["intrinsic_returns"] = (
+                    buff["intrinsic_advantages"]
+                    + buff["valids"][:, :-1] * denormalized_values[:, :-1]
+                )
+                #################
+
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
             for key in ["normalized_obs", "rnn_states", "values", "valids"]:
                 buff[key] = buff[key][:, :-1]
@@ -785,6 +947,16 @@ class IntrinsicRewardLearner(Learner):
             if self.cfg.normalize_returns:
                 self.actor_critic.returns_normalizer(buff["returns"])  # in-place
 
+            #################
+            # MY CODE BLOCK #
+            #################
+            buff["intrinsic_returns_pre_normalization"] = buff[
+                "intrinsic_returns"
+            ].clone()
+            if self.cfg.normalize_intrinsic_returns:
+                self.ir_module.returns_normalizer(buff["intrinsic_returns"])
+            #################
+
             num_invalids = dataset_size - buff["valids"].sum().item()
             if num_invalids > 0:
                 invalid_fraction = num_invalids / dataset_size
@@ -802,7 +974,13 @@ class IntrinsicRewardLearner(Learner):
                     invalid_indices
                 ] = -1  # -1 seems like a safe value
 
-            return buff, dataset_size, num_invalids
+        #################
+        # MY CODE BLOCK #
+        #################
+        for key, value in intrinsic_output.items():
+            buff[key] = value.reshape((dataset_size,) + tuple(value.shape[2:]))
+        return buff, dataset_size, num_invalids
+        #################
 
     def train(self, batch: TensorDict) -> Optional[Dict]:
         #############

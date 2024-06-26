@@ -6,6 +6,7 @@ from torch import Tensor
 from torch.nn import Module
 from gymnasium.spaces import Space
 
+from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
@@ -18,8 +19,9 @@ class IntrinsicRewardModule(Module, ABC):
         super().__init__()
         self.cfg: Config = cfg
         self.obs_space: Space = obs_space
+        self.returns_normalizer: RunningMeanStdInPlace = RunningMeanStdInPlace((1,))
 
-    def compute_intrinsic_rewards(
+    def forward(
         self, mb: Union[AttrDict | TensorDict], leading_dims: int = 1
     ) -> TensorDict:
         pass

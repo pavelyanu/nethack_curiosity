@@ -12,7 +12,8 @@ from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.base import (
 
 
 class MockIntrinsicRewardModule(IntrinsicRewardModule):
-    def compute_intrinsic_rewards(
+
+    def forward(
         self, mb: Union[AttrDict | TensorDict], leading_dims: int = 1
     ) -> TensorDict:
         if isinstance(mb, AttrDict):
