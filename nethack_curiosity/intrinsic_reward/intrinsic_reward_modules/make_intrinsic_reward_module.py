@@ -21,6 +21,12 @@ def make_intrinsic_reward_module(
         )
 
         return RNDIntrinsicRewardModule(cfg, obs_space)
+    elif cfg.intrinsic_reward_module == "noveld":
+        from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.noveld import (
+            NovelDIntrindicRewardModule,
+        )
+
+        return NovelDIntrindicRewardModule(cfg, obs_space)
     else:
         raise NotImplementedError(
             f"Unknown intrinsic reward module: {cfg.intrinsic_reward_module}"

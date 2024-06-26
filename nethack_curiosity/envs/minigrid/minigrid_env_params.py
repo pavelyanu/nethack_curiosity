@@ -7,14 +7,9 @@ def minigrid_env_override_defaults(
     if testing:
         return
     parser.set_defaults(
-        # train_for_env_steps=50000000,
-        num_workers=16,
-        num_envs_per_worker=32,
-        worker_num_splits=2,
+        train_for_env_steps=10_000_000,
         env_type="minigrid",
-        # with_wandb=True,
-        # wandb_user="pyanushonak",
-        # wandb_project="ppo_curiosity",
+        normalize_input_keys=["image"],
     )
 
 
@@ -37,19 +32,19 @@ def add_minigrid_env_args(env: str, parser: ArgumentParser, testing: bool = Fals
     parser.add_argument(
         "--minigrid_room_size",
         type=int,
-        default=5,
+        default=3,
     )
 
     parser.add_argument(
         "--minigrid_room_num",
         type=int,
-        default=5,
+        default=3,
     )
 
     parser.add_argument(
         "--minigrid_row_num",
         type=int,
-        default=5,
+        default=1,
     )
 
     parser.add_argument(
@@ -64,4 +59,11 @@ def add_minigrid_env_args(env: str, parser: ArgumentParser, testing: bool = Fals
         type=str,
         default="conv",
         choices=["conv", "flat"],
+    )
+
+    parser.add_argument(
+        "--encoder_hidden_size",
+        type=int,
+        default=256,
+        help="Hidden size of the encoder",
     )

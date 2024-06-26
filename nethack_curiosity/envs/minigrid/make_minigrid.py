@@ -6,6 +6,9 @@ from minigrid.envs.keycorridor import KeyCorridorEnv
 from minigrid.minigrid_env import MiniGridEnv
 
 from nethack_curiosity.envs.minigrid.wrappers import __required__, __global_order__
+from nethack_curiosity.envs.minigrid.wrappers.minigrid_visit_count import (
+    MinigridVisitCountWrapper,
+)
 from sample_factory.utils.typing import Config
 
 
@@ -32,6 +35,8 @@ def make_minigrid(
         cfg.minigrid_room_num,
         cfg.minigrid_row_num,
     )
+    if cfg.intrinsic_reward_module == "noveld":
+        __required__.append(MinigridVisitCountWrapper)
     if cfg is not None:
         env = apply_required_wrappers(env, cfg)
     return env

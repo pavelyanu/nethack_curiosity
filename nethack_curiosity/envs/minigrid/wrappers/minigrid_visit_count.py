@@ -36,15 +36,15 @@ class MinigridVisitCountWrapper(gym.Wrapper):
 
     def reset(self, **kwargs):
         self.visit_counts = {}
-        _, obs = self.env.reset(**kwargs)
-        obs["visit_count"] = np.array([0], dtype=np.uint64)
-        return obs
+        obs, info = self.env.reset(**kwargs)
+        obs["visit_count"] = np.array([1], dtype=np.uint64)
+        return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         state_hash = self.hash(obs)
         obs["visit_count"] = np.array(
-            [self.visit_counts.get(state_hash, 0)], dtype=np.uint64
+            [self.visit_counts.get(state_hash, 1)], dtype=np.uint64
         )
         self.visit_counts[state_hash] = obs["visit_count"][0] + 1
-        return obs, reward, terminated, info
+        return obs, reward, terminated, truncated, info

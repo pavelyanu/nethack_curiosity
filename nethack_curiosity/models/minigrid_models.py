@@ -99,8 +99,10 @@ class MinigridIntrinsicRewardEncoder(Encoder):
             [encoder.get_out_size() for encoder in self.encoder_dict.values()]
         )
 
+        self.hidden_size = cfg.encoder_hidden_size
+
         self.fc = nn.Sequential(
-            nn.Linear(encoder_out_size, 256),
+            nn.Linear(encoder_out_size, self.hidden_size),
             nn.ReLU(),
         )
 
@@ -111,7 +113,7 @@ class MinigridIntrinsicRewardEncoder(Encoder):
         return self.fc(x)
 
     def get_out_size(self) -> int:
-        return 256
+        return self.hidden_size
 
     def model_to_device(self, device):
         for encoder in self.encoder_dict.values():
