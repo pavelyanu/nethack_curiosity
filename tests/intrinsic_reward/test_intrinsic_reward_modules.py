@@ -33,7 +33,7 @@ def test_rnd_learning():
     fake_obs = torch.rand(32, 5, 5, 3)
     fake_obs = TensorDict({"image": fake_obs})
     with torch.no_grad():
-        old_target_embedding = rnd.target_encoder(fake_obs)
+        old_target_embedding = rnd.target(fake_obs)
     for _ in range(1000):
         fake_rewards = torch.rand(32)
         mb = AttrDict(
@@ -43,8 +43,8 @@ def test_rnd_learning():
             }
         )
         optimizer.zero_grad()
-        target_embedding = rnd.target_encoder(fake_obs)
-        predictor_embedding = rnd.predictor_encoder(fake_obs)
+        target_embedding = rnd.target(fake_obs)
+        predictor_embedding = rnd.predictor(fake_obs)
         error = target_embedding - predictor_embedding
         loss = error.pow(2).sum(1).mean()
         loss.backward()
