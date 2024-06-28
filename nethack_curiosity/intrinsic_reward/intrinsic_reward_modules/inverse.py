@@ -80,36 +80,22 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
         if leading_dims == 1:
             return self.compute_intrinsic_reward_for_batch(td)
 
-        intrinsic_rewards = torch.empty(
-            td["normalized_obs"]["visit_count"].shape[0],
-            td["normalized_obs"]["visit_count"].shape[1] - 1,
-            device=self.device,
-        )
+        key = self.observation_keys[0]
+        E, T = td["normalized_obs"][key].shape[:2]
+        intrinsic_rewards = torch.empty(E, T - 1, device=self.device)
         encoding_current = torch.empty(
-            td["normalized_obs"]["visit_count"].shape[0],
-            td["normalized_obs"]["visit_count"].shape[1] - 1,
-            self.state_encoder.get_out_size(),
-            device=self.device,
+            E, T - 1, self.state_encoder.get_out_size(), device=self.device
         )
         encoding_next = torch.empty(
-            td["normalized_obs"]["visit_count"].shape[0],
-            td["normalized_obs"]["visit_count"].shape[1] - 1,
-            self.state_encoder.get_out_size(),
-            device=self.device,
+            E, T - 1, self.state_encoder.get_out_size(), device=self.device
         )
         forward_prediction = torch.empty(
-            td["normalized_obs"]["visit_count"].shape[0],
-            td["normalized_obs"]["visit_count"].shape[1] - 1,
-            self.state_encoder.get_out_size(),
-            device=self.device,
+            E, T - 1, self.state_encoder.get_out_size(), device=self.device
         )
         inverse_prediction = torch.empty(
-            td["normalized_obs"]["visit_count"].shape[0],
-            td["normalized_obs"]["visit_count"].shape[1] - 1,
-            self.action_space.n,
-            device=self.device,
+            E, T - 1, self.action_space.n, device=self.device
         )
-        for e in range(td["normalized_obs"]["visit_count"].shape[0]):
+        for e in range(E):
             batch = td[e]
             batch_result = self.compute_intrinsic_reward_for_batch(batch)
             intrinsic_rewards[e] = batch_result["intrinsic_rewards"]
@@ -117,13 +103,19 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
             encoding_next[e] = batch_result["encoding_next"]
             forward_prediction[e] = batch_result["forward_prediction"]
             inverse_prediction[e] = batch_result["inverse_prediction"]
-        return TensorDict(
-            intrinsic_rewards=intrinsic_rewards,
-            encoding_current=encoding_current,
-            encoding_next=encoding_next,
-            forward_prediction=forward_prediction,
-            inverse_prediction=inverse_prediction,
-        )
+
+        if self.cfg.recompute_intrinsic_loss:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+            )
+        else:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+                encoding_current=encoding_current,
+                encoding_next=encoding_next,
+                forward_prediction=forward_prediction,
+                inverse_prediction=inverse_prediction,
+            )
 
     def compute_intrinsic_reward_for_batch(self, batch: TensorDict) -> TensorDict:
         normalized_obs = batch["normalized_obs"]

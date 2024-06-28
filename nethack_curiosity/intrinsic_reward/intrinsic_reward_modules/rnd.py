@@ -91,11 +91,17 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
         intrinsic_rewards = (
             (target_features.detach() - predictor_features.detach()).pow(2).sum(dim=-1)
         )
-        return TensorDict(
-            intrinsic_rewards=intrinsic_rewards[:, 1:],
-            target_features=target_features[:, 1:],
-            predictor_features=predictor_features[:, 1:],
-        )
+
+        if self.cfg.recompute_intrinsic_loss:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards[:, 1:],
+            )
+        else:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards[:, 1:],
+                target_features=target_features[:, 1:],
+                predictor_features=predictor_features[:, 1:],
+            )
 
     def compute_intrinsic_rewards_for_batch(self, batch: TensorDict) -> TensorDict:
         normalized_obs = batch["normalized_obs"]

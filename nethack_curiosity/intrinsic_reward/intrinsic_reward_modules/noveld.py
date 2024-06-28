@@ -49,34 +49,32 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
 
         # dims of td are [envs, time + 1, ...]
         # alloc output tensor with shape [envs, time]
+        normalized_obs = td["normalized_obs"]
+        key = self.observation_keys[0]
+        E, T = normalized_obs[key].shape[:2]
         target_features = torch.empty(
-            td["normalized_obs"]["image"].shape[0],
-            td["normalized_obs"]["image"].shape[1] - 1,
-            self.cfg.rnd_mlp_layers[-1],
-            device=self.device,
+            E, T - 1, self.cfg.rnd_mlp_layers[-1], device=self.device
         )
         predictor_features = torch.empty(
-            td["normalized_obs"]["image"].shape[0],
-            td["normalized_obs"]["image"].shape[1] - 1,
-            self.cfg.rnd_mlp_layers[-1],
-            device=self.device,
+            E, T - 1, self.cfg.rnd_mlp_layers[-1], device=self.device
         )
-        intrinsic_rewards = torch.empty(
-            td["normalized_obs"]["image"].shape[0],
-            td["normalized_obs"]["image"].shape[1] - 1,
-            device=self.device,
-        )
-        for e in range(td["normalized_obs"]["image"].shape[0]):
+        intrinsic_rewards = torch.empty(E, T - 1, device=self.device)
+        for e in range(E):
             batch = td[e]
             batch_result = self.compute_intrinsic_reward_for_batch(batch)
             target_features[e] = batch_result["target_features"]
             predictor_features[e] = batch_result["predictor_features"]
             intrinsic_rewards[e] = batch_result["intrinsic_rewards"]
-        return TensorDict(
-            intrinsic_rewards=intrinsic_rewards,
-            target_features=target_features,
-            predictor_features=predictor_features,
-        )
+        if self.cfg.recompute_intrinsic_loss:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+            )
+        else:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+                target_features=target_features,
+                predictor_features=predictor_features,
+            )
 
     def compute_intrinsic_reward_for_batch(self, batch: TensorDict) -> TensorDict:
         normalized_obs = batch["normalized_obs"]

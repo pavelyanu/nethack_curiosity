@@ -10,7 +10,9 @@ from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
-from sample_factory.algo.utils.env_info import EnvInfo
+
+from nethack_curiosity.models.nethack_models import NethackIntrinsicRewardEncoder
+from nethack_curiosity.models.minigrid_models import MinigridIntrinsicRewardEncoder
 
 
 class IntrinsicRewardModule(Module, ABC):
@@ -40,11 +42,12 @@ class IntrinsicRewardModule(Module, ABC):
         pass
 
     def select_encoder_type(self, cfg: Config) -> type:
-        if cfg.env_type == "minigrid":
-            from nethack_curiosity.models.minigrid_models import (
-                MinigridIntrinsicRewardEncoder,
+        mapping = {
+            "nethack": NethackIntrinsicRewardEncoder,
+            "minigrid": MinigridIntrinsicRewardEncoder,
+        }
+        if cfg.env_type not in mapping:
+            raise NotImplementedError(
+                f"There is no encoder for env type: {cfg.encoder_type}"
             )
-
-            return MinigridIntrinsicRewardEncoder
-        else:
-            raise NotImplementedError(f"Unknown env type: {cfg.env_type}")
+        return mapping[cfg.env_type]
