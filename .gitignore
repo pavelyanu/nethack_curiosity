@@ -64,3 +64,4 @@ ipython_config.py
 
 # Artifacts
 *train_dir*
+*wandb*
