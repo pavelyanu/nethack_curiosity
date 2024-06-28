@@ -31,14 +31,14 @@ def get_observation_space(cfg: Config, obs_space: Space) -> Dict:
 
 
 class NovelDIntrindicRewardModule(IntrinsicRewardModule):
-    def __init__(self, cfg: Config, obs_space: Space):
-        super().__init__(cfg, obs_space)
+    def __init__(self, cfg: Config, obs_space: Space, action_space: Space):
+        super().__init__(cfg, obs_space, action_space)
         self.device: torch.device = torch.device("cpu")
 
         self.observation_keys = cfg.observation_keys
         self.obs_space = get_observation_space(cfg, obs_space)
 
-        self.rnd_module = RNDIntrinsicRewardModule(cfg, obs_space)
+        self.rnd_module = RNDIntrinsicRewardModule(cfg, obs_space, action_space)
 
         self.returns_normalizer: RunningMeanStdInPlace = RunningMeanStdInPlace((1,))
         self.returns_normalizer = torch.jit.script(self.returns_normalizer)
@@ -113,9 +113,25 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
         )
 
     def loss(self, mb: AttrDict) -> Tensor:
-        target_features = mb.target_features
-        predictor_features = mb.predictor_features
-        return (target_features.detach() - predictor_features).pow(2).sum(dim=1).mean()
+        if self.cfg.recompute_intrinsic_loss:
+            target_encoding = self.rnd_module.target_encoder(mb.normalized_obs)
+            if self.cfg.rnd_share_encoder:
+                predictor_encoding = target_encoding
+            else:
+                predictor_encoding = self.rnd_module.predictor_encoder(
+                    mb.normalized_obs
+                )
+            target_features = self.rnd_module.target_head(target_encoding)
+            predictor_features = self.rnd_module.predictor_head(predictor_encoding)
+            return (
+                (target_features.detach() - predictor_features).pow(2).sum(dim=1).mean()
+            )
+        else:
+            target_features = mb.target_features
+            predictor_features = mb.predictor_features
+            return (
+                (target_features.detach() - predictor_features).pow(2).sum(dim=1).mean()
+            )
 
     def model_to_device(self, device: torch.device):
         self.device = device

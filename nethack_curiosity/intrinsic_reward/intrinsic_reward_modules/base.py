@@ -15,10 +15,12 @@ from sample_factory.algo.utils.env_info import EnvInfo
 
 class IntrinsicRewardModule(Module, ABC):
 
-    def __init__(self, cfg: Config, obs_space: Space):
+    def __init__(self, cfg: Config, obs_space: Space, action_space: Space):
         super().__init__()
+        self.device: torch.device = torch.device("cpu")
         self.cfg: Config = cfg
         self.obs_space: Space = obs_space
+        self.action_space: Space = action_space
         self.returns_normalizer: RunningMeanStdInPlace = RunningMeanStdInPlace((1,))
 
     def forward(
@@ -26,8 +28,23 @@ class IntrinsicRewardModule(Module, ABC):
     ) -> TensorDict:
         pass
 
-    def model_to_device(self, device: torch.device):
-        pass
+    def model_to_device(self, device):
+        self.device = device
+        for module in self.children():
+            if hasattr(module, "model_to_device"):
+                module.model_to_device(device)
+            else:
+                module.to(device)
 
     def loss(self, mb: AttrDict) -> Tensor:
         pass
+
+    def select_encoder_type(self, cfg: Config) -> type:
+        if cfg.env_type == "minigrid":
+            from nethack_curiosity.models.minigrid_models import (
+                MinigridIntrinsicRewardEncoder,
+            )
+
+            return MinigridIntrinsicRewardEncoder
+        else:
+            raise NotImplementedError(f"Unknown env type: {cfg.env_type}")

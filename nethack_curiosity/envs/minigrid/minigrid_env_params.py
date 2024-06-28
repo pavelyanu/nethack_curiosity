@@ -48,6 +48,12 @@ def add_minigrid_env_args(env: str, parser: ArgumentParser, testing: bool = Fals
     )
 
     parser.add_argument(
+        "--minigrid_max_steps",
+        type=int,
+        default=100,
+    )
+
+    parser.add_argument(
         "--image_head",
         type=str,
         default="conv",

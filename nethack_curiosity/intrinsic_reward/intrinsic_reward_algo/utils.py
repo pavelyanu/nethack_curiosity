@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 
-@torch.jit.script
+# @torch.jit.script
 def gae_advantages_single_batch(
     rewards: Tensor, dones: Tensor, values: Tensor, valids: Tensor, γ: float, λ: float
 ) -> Tensor:

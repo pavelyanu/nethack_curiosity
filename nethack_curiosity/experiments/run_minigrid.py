@@ -29,6 +29,8 @@ def main():
     register_env("keycorridor", make_minigrid)
     register_env("empty", make_minigrid)
     register_env("multiroom", make_minigrid)
+    register_env("lockedroom", make_minigrid)
+    register_env("obstructedmaze_2dlh", make_minigrid)
     cfg = parse_args()
     status = run_ir_rl(cfg)
     assert status == ExperimentStatus.SUCCESS

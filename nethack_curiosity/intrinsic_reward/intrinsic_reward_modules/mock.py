@@ -17,10 +17,16 @@ class MockIntrinsicRewardModule(IntrinsicRewardModule):
         self, mb: Union[AttrDict | TensorDict], leading_dims: int = 1
     ) -> TensorDict:
         if isinstance(mb, AttrDict):
-            ir_rewards = mb.rewards.new_zeros(mb.rewards.size())
+            ir_rewards = mb.rewards.new_zeros(mb.rewards.size(), device=self.device)
         else:
-            ir_rewards = mb["rewards"].new_zeros(mb["rewards"].size())
+            ir_rewards = mb["rewards"].new_zeros(
+                mb["rewards"].size(), device=self.device
+            )
         return TensorDict(intrinsic_rewards=ir_rewards)
 
     def loss(self, mb: AttrDict) -> Tensor:
-        return torch.zeros(torch.Size([]), device=mb.rewards_cpu.device)
+        return torch.zeros(torch.Size([]), device=self.device)
+
+    def model_to_device(self, device: torch.device):
+        self.device = device
+        self.returns_normalizer.to(device)

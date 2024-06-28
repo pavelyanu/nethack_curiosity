@@ -25,8 +25,8 @@ def get_observation_space(cfg: Config, obs_space: Space) -> Dict:
 
 
 class RNDIntrinsicRewardModule(IntrinsicRewardModule):
-    def __init__(self, cfg: Config, obs_space: Space):
-        super().__init__(cfg, obs_space)
+    def __init__(self, cfg: Config, obs_space: Space, action_space: Space):
+        super().__init__(cfg, obs_space, action_space)
         self.device: torch.device = torch.device("cpu")
 
         self.observation_keys = cfg.observation_keys
@@ -68,16 +68,6 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
         predictor_head = nn.Sequential(*predictor_head_layers)
         return target_encoder, target_head, predictor_encoder, predictor_head
 
-    def select_encoder_type(self, cfg: Config) -> type:
-        if cfg.env_type == "minigrid":
-            from nethack_curiosity.models.minigrid_models import (
-                MinigridIntrinsicRewardEncoder,
-            )
-
-            return MinigridIntrinsicRewardEncoder
-        else:
-            raise NotImplementedError(f"Unknown env type: {cfg.env_type}")
-
     def forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
 
         if leading_dims == 1:
@@ -113,6 +103,9 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
         if self.cfg.rnd_blank_obs:
             for key in self.observation_keys:
                 normalized_obs[key] = torch.zeros_like(normalized_obs[key])
+        if self.cfg.rnd_random_obs:
+            for key in self.observation_keys:
+                normalized_obs[key] = torch.rand_like(normalized_obs[key])
 
         target_encoding = self.target_encoder(normalized_obs)
         if self.cfg.rnd_share_encoder:
@@ -131,7 +124,7 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
         )
 
     def loss(self, mb: AttrDict) -> Tensor:
-        if self.cfg.rnd_recompute_loss:
+        if self.cfg.recompute_intrinsic_loss:
             target_encoding = self.target_encoder(mb["normalized_obs"])
             if self.cfg.rnd_share_encoder:
                 predictor_encoding = target_encoding
@@ -157,10 +150,3 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
         self.predictor_head.to(device)
         self.returns_normalizer.to(device)
         self.returns_normalizer = torch.jit.script(self.returns_normalizer)
-
-        self.predictor_head.register_full_backward_pre_hook(hook)
-        self.predictor_head.register_full_backward_hook(hook)
-
-
-def hook(*args):
-    print("hooked")

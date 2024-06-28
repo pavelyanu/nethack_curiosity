@@ -44,6 +44,9 @@ from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.base import (
 from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.make_intrinsic_reward_module import (
     make_intrinsic_reward_module,
 )
+from nethack_curiosity.intrinsic_reward.intrinsic_reward_algo.utils import (
+    gae_advantages_single_batch,
+)
 
 
 class IntrinsicRewardLearner(Learner):
@@ -108,7 +111,9 @@ class IntrinsicRewardLearner(Learner):
         # MY CODE BLOCK #
         #################
         log.debug("Initializing intrinsic reward module")
-        self.ir_module = make_intrinsic_reward_module(self.cfg, self.env_info.obs_space)
+        self.ir_module = make_intrinsic_reward_module(
+            self.cfg, self.env_info.obs_space, self.env_info.action_space
+        )
         log.debug("Intrinsic reward module initialized")
         self.ir_module.model_to_device(self.device)
         #################
@@ -459,15 +464,42 @@ class IntrinsicRewardLearner(Learner):
 
             del core_outputs
 
+        #################
+        # MY CODE BLOCK #
+        #################
+        # with self.timing.add_time("intrinsic_rewards"):
+        #     ir_results: TensorDict = self.ir_module.forward(mb)
+        #     for k, v in ir_results.items():
+        #         mb[k] = v
+        #
+        # with self.timing.add_time("intrinsic_returns"):
+        #     ir_advantages = gae_advantages_single_batch(
+        #         mb.intrinsic_rewards,
+        #         mb.dones,
+        #         mb.denormalized_values,
+        #         mb.valids,
+        #         self.cfg.gamma,
+        #         self.cfg.gae_lambda,
+        #     )
+        #
+        #     mb.intrinsic_advantages = ir_advantages
+        #     mb.intrinsic_returns = ir_advantages + mb.valids_next * mb.intrinsic_values
+        #################
+
         # these computations are not the part of the computation graph
         with torch.no_grad(), self.timing.add_time("advantages_returns"):
             #################
             # MY CODE BLOCK #
             #################
+            # at the moment vtrace is not supported for intrinsic reward learner
+            # so I have removed the vtrace code block
             if self.cfg.with_vtrace:
                 raise NotImplementedError(
                     "V-trace is not supported for intrinsic reward learner"
                 )
+            ####################################################
+            # THESE SEVEN LINES ARE FROM THE ORIGINAL FUNCTION #
+            ####################################################
             adv = mb.advantages
             targets = mb.returns
 
@@ -475,6 +507,7 @@ class IntrinsicRewardLearner(Learner):
             adv = (adv - adv_mean) / torch.clamp_min(
                 adv_std, 1e-7
             )  # normalize advantage
+            ########################################################
 
             ir_adv = mb.intrinsic_advantages
             ir_targets = mb.intrinsic_returns
@@ -860,21 +893,17 @@ class IntrinsicRewardLearner(Learner):
                 # values are not normalized in this case, so we can use them as is
                 denormalized_values = buff["values"]
 
-        #################
-        # MY CODE BLOCK #
-        #################
-        with self.timing.add_time("intrinsic_rewards computation"):
-            if not self.ir_module.training:
-                self.ir_module.train()
-            intrinsic_output = self.ir_module(buff, leading_dims=2)
-            intrinsic_rewards = intrinsic_output["intrinsic_rewards"]
-            # buff["rewards"] += (
-            #     intrinsic_rewards.to(buff["rewards"].device) * self.ir_weight
-            # )
-            for key, value in intrinsic_output.items():
-                buff[key] = value
-        #################
-        with torch.no_grad():
+            #################
+            # MY CODE BLOCK #
+            #################
+            with self.timing.add_time("intrinsic_rewards computation"):
+                if not self.ir_module.training:
+                    self.ir_module.train()
+                intrinsic_output = self.ir_module(buff, leading_dims=2)
+                intrinsic_rewards = intrinsic_output["intrinsic_rewards"]
+                for key, value in intrinsic_output.items():
+                    buff[key] = value
+            #################
 
             if self.cfg.value_bootstrap:
                 # Value bootstrapping is a technique that reduces the surprise for the critic in case
@@ -928,8 +957,25 @@ class IntrinsicRewardLearner(Learner):
                 #################
 
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
+            #################
+            # MY CODE BLOCK #
+            #################
+            # buff["denormalized_values"] = denormalized_values
+            # keys = [
+            #     "normalized_obs",
+            #     "rnn_states",
+            #     "values",
+            #     "valids",
+            #     "denormalized_values",
+            # ]
+            # for key in keys:
+            #     buff[key + "_next"] = buff[key][:, -1]
+            #     buff[key] = buff[key][:, :-1]
+            #################
+            # ORIGINAL CODE #
             for key in ["normalized_obs", "rnn_states", "values", "valids"]:
                 buff[key] = buff[key][:, :-1]
+            #################
 
             dataset_size = buff["actions"].shape[0] * buff["actions"].shape[1]
             for d, k, v in iterate_recursively(buff):
@@ -974,13 +1020,7 @@ class IntrinsicRewardLearner(Learner):
                     invalid_indices
                 ] = -1  # -1 seems like a safe value
 
-        #################
-        # MY CODE BLOCK #
-        #################
-        for key, value in intrinsic_output.items():
-            buff[key] = value.reshape((dataset_size,) + tuple(value.shape[2:]))
-        return buff, dataset_size, num_invalids
-        #################
+            return buff, dataset_size, num_invalids
 
     def train(self, batch: TensorDict) -> Optional[Dict]:
         #############

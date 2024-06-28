@@ -11,7 +11,16 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
         type=str,
         default="rnd",
         help="Intrinsic reward module to use",
-        choices=["mock", "none", "count", "curiosity", "rnd", "ride", "noveld"],
+        choices=[
+            "mock",
+            "none",
+            "count",
+            "curiosity",
+            "rnd",
+            "ride",
+            "noveld",
+            "inverse",
+        ],
     )
 
     parser.add_argument(
@@ -30,10 +39,10 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
     )
 
     parser.add_argument(
-        "--rnd_recompute_loss",
+        "--recompute_intrinsic_loss",
         type=bool,
         default=True,
-        help="Recompute the loss for the RND module instead of using the one computed during the forward pass",
+        help="Recompute the intrinsic loss instead of using the stored value",
     )
 
     parser.add_argument(
@@ -41,6 +50,13 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
         type=bool,
         default=False,
         help="Blank out the observation before passing it to the RND module. For debugging purposes.",
+    )
+
+    parser.add_argument(
+        "--rnd_random_obs",
+        type=bool,
+        default=False,
+        help="Randomize the observation before passing it to the RND module. For debugging purposes.",
     )
 
     parser.add_argument(
@@ -62,6 +78,44 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
         "--force_intrinsic_reward_components",
         action="store_true",
         help="Force the use of intrinsic reward components even if the intrinsic reward module is mock or none",
+    )
+
+    parser.add_argument(
+        "--inverse_wiring",
+        type=str,
+        default="icm",
+        help="Wiring of the inverse exploration model",
+        choices=["icm", "ride"],
+    )
+
+    parser.add_argument(
+        "--visit_count_weighting",
+        type=str,
+        default="none",
+        help="Scheme to weight the intrinsic rewards based on visit count",
+        choices=["none", "inverse_sqrt", "novel"],
+    )
+
+    parser.add_argument(
+        "--inverse_action_mode",
+        type=str,
+        default="onehot",
+        help="Action encoding mode for the inverse model",
+        choices=["onehot", "logits", "logprobs"],
+    )
+
+    parser.add_argument(
+        "--inverse_loss_weight",
+        type=float,
+        default=1.0,
+        help="Weight of the inverse loss",
+    )
+
+    parser.add_argument(
+        "--forward_loss_weight",
+        type=float,
+        default=1.0,
+        help="Weight of the forward loss",
     )
 
     parser.add_argument(
