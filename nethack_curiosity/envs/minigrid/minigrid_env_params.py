@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from sample_factory.utils.utils import str2bool
 
 
 def minigrid_env_override_defaults(

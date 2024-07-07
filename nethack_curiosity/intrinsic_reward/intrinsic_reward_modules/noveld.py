@@ -43,7 +43,7 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
         self.returns_normalizer: RunningMeanStdInPlace = RunningMeanStdInPlace((1,))
         self.returns_normalizer = torch.jit.script(self.returns_normalizer)
 
-    def forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
+    def _forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
         if leading_dims == 1:
             return self.compute_intrinsic_reward_for_batch(td)
 
@@ -109,6 +109,61 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
             target_features=target_features[1:],
             predictor_features=predictor_features[1:],
         )
+
+    def forward(
+        self, mb: Union[AttrDict | TensorDict], leading_dims: int = 1
+    ) -> TensorDict:
+        if leading_dims == 1:
+            return self.compute_intrinsic_reward_for_batch(mb)
+
+        normalized_obs = mb["normalized_obs"]
+        normalized_obs_shape = normalized_obs[self.observation_keys[0]].shape
+        E, T = normalized_obs_shape[:2]
+
+        reshaped_obs = TensorDict()
+        keys = normalized_obs.keys()
+        for key in keys:
+            new_shape = (E * T,) + normalized_obs[key].shape[2:]
+            reshaped_obs[key] = normalized_obs[key].view(new_shape)
+
+        target_encoding = self.rnd_module.target_encoder(reshaped_obs)
+        if self.cfg.rnd_share_encoder:
+            predictor_encoding = target_encoding
+        else:
+            predictor_encoding = self.rnd_module.predictor_encoder(reshaped_obs)
+        target_features = self.rnd_module.target_head(target_encoding)
+        predictor_features = self.rnd_module.predictor_head(predictor_encoding)
+        target_features = target_features.view(E, T, -1)
+        predictor_features = predictor_features.view(E, T, -1)
+        novelty_current = (
+            (target_features[:, :-1].detach() - predictor_features.detach()[:, :-1])
+            .pow(2)
+            .sum(dim=-1)
+        )
+        novelty_next = (
+            (target_features[:, 1:].detach() - predictor_features.detach()[:, 1:])
+            .pow(2)
+            .sum(dim=-1)
+        )
+        scaling_factor = 0.5  # Can be made a hyperparameter
+        intrinsic_rewards = novelty_next - scaling_factor * novelty_current
+        intrinsic_rewards = torch.clamp(intrinsic_rewards, min=0.0)
+        visit_count = normalized_obs["visit_count"]
+        visit_count = visit_count == 1
+        if self.cfg.noveld_constant_novelty != 0.0:
+            intrinsic_rewards = self.cfg.noveld_constant_novelty * visit_count[:, 1:]
+        else:
+            intrinsic_rewards = intrinsic_rewards * visit_count[:, 1:]
+        if self.cfg.recompute_intrinsic_loss:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+            )
+        else:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+                target_features=target_features[:, 1:],
+                predictor_features=predictor_features[:, 1:],
+            )
 
     def loss(self, mb: AttrDict) -> Tensor:
         if self.cfg.recompute_intrinsic_loss:

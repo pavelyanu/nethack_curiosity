@@ -1,9 +1,9 @@
-from typing import Dict as DictType, List
+from typing import Dict as DictType
 from collections import namedtuple
 
 import gymnasium as gym
-from gymnasium.spaces import Dict, Discrete
 import numpy as np
+from gymnasium.spaces import Dict, Discrete
 
 from sample_factory.utils.typing import Config
 
@@ -13,7 +13,7 @@ BLStats = namedtuple(
 )
 
 
-class NethackVisitCountWrapper(gym.Wrapper):
+class NethackDlvlWrapper(gym.Wrapper):
     def __init__(self, env, cfg: Config):
         super().__init__(env)
 
@@ -22,13 +22,9 @@ class NethackVisitCountWrapper(gym.Wrapper):
         old_space: Dict = env.observation_space
         assert "blstats" in old_space.spaces
 
-        new_space: DictType = {"visit_count": Discrete(10000)}
+        new_space: DictType = {"dlvl": Discrete(100)}
         new_space.update([(k, old_space[k]) for k in old_space.keys()])
         self.observation_space = Dict(new_space)
-
-        self.blstats: List[str] = cfg.visit_count_blstats
-
-        self.visit_counts = {}
 
     def state_hash(self, obs) -> str:
         blstats = BLStats(*obs["blstats"])
@@ -36,16 +32,11 @@ class NethackVisitCountWrapper(gym.Wrapper):
         return "_".join(map(str, state))
 
     def reset(self, **kwargs):
-        self.visit_counts = {}
         obs, info = self.env.reset(**kwargs)
-        obs["visit_count"] = np.array([1], dtype=np.uint64)
+        obs["dlvl"] = np.array([BLStats(*obs["blstats"]).depth], dtype=np.uint64)
         return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        state_hash = self.state_hash(obs)
-        obs["visit_count"] = np.array(
-            [self.visit_counts.get(state_hash, 1)], dtype=np.uint64
-        )
-        self.visit_counts[state_hash] = obs["visit_count"][0] + 1
+        obs["dlvl"] = np.array([BLStats(*obs["blstats"]).depth], dtype=np.uint64)
         return obs, reward, terminated, truncated, info

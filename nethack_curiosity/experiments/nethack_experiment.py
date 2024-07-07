@@ -3,7 +3,7 @@ from sample_factory.launcher.run_description import (
     RunDescription,
 )
 
-from nethack_curiosity.experiments.setups.minigrid.setup9 import get_setups
+from nethack_curiosity.experiments.setups.nethack.setup2 import get_setups
 
 
 _params = get_setups()
@@ -14,11 +14,11 @@ for p in _params:
     print(p)
 
 _experiment = Experiment(
-    "easy_rnd_vs_mock",
-    "python -m nethack_curiosity.experiments.run_minigrid --env keycorridor --minigrid_room_size 3 --minigrid_row_num 3",
+    "rnd_irw_grid",
+    "python -m nethack_curiosity.experiments.run_nethack --env score",
     _params,
 )
 
-description = RunDescription("keycorridor", [_experiment])
+description = RunDescription("score", [_experiment])
 
 RUN_DESCRIPTION = description

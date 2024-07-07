@@ -1,8 +1,30 @@
 from argparse import ArgumentParser
+from sample_factory.utils.utils import str2bool
 
 
 def intrinsic_reward_override_defaults(env: str, parser: ArgumentParser):
-    pass
+    parser.set_defaults(
+        intrinsic_reward_module="rnd",
+        rnd_share_encoder=False,
+        rnd_target_mlp_layers=[1024, 1024, 1024, 1024],
+        rnd_predictor_mlp_layers=[1024, 1024, 1024],
+        recompute_intrinsic_loss=True,
+        rnd_blank_obs=False,
+        rnd_random_obs=False,
+        rnd_blank_target=False,
+        noveld_novelty_module="rnd",
+        noveld_constant_novelty=0.0,
+        force_intrinsic_reward_components=False,
+        inverse_wiring="icm",
+        visit_count_weighting="none",
+        inverse_action_mode="onehot",
+        inverse_loss_weight=1.0,
+        forward_loss_weight=1.0,
+        env_type="minigrid",
+        intrinsic_reward_weight=1.0,
+        normalize_intrinsic_returns=True,
+        version=1,
+    )
 
 
 def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
@@ -25,38 +47,57 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
 
     parser.add_argument(
         "--rnd_share_encoder",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Share the encoder between the RND target and predictor networks",
     )
 
     parser.add_argument(
-        "--rnd_mlp_layers",
+        "--rnd_target_mlp_layers",
         type=int,
         nargs="+",
-        default=[32],
-        help="Number of hidden layers in the RND MLP",
+        default=[1024, 1024, 1024, 1024],
+        # default=[1024, 1024, 128, 128],
+        # default=[128],
+        help="Number of hidden layers in the RND target head",
+    )
+
+    parser.add_argument(
+        "--rnd_predictor_mlp_layers",
+        type=int,
+        nargs="+",
+        default=[1024, 1024, 1024],
+        # default=[1024, 128, 128],
+        # default=[128],
+        help="Number of hidden layers in the RND predictor head",
     )
 
     parser.add_argument(
         "--recompute_intrinsic_loss",
-        type=bool,
+        type=str2bool,
         default=True,
         help="Recompute the intrinsic loss instead of using the stored value",
     )
 
     parser.add_argument(
         "--rnd_blank_obs",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Blank out the observation before passing it to the RND module. For debugging purposes.",
     )
 
     parser.add_argument(
         "--rnd_random_obs",
-        type=bool,
+        type=str2bool,
         default=False,
         help="Randomize the observation before passing it to the RND module. For debugging purposes.",
+    )
+
+    parser.add_argument(
+        "--rnd_blank_target",
+        type=str2bool,
+        default=False,
+        help="Blank out the target before passing it to the RND module. For debugging purposes.",
     )
 
     parser.add_argument(
@@ -76,7 +117,8 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
 
     parser.add_argument(
         "--force_intrinsic_reward_components",
-        action="store_true",
+        type=str2bool,
+        default=False,
         help="Force the use of intrinsic reward components even if the intrinsic reward module is mock or none",
     )
 
@@ -134,11 +176,18 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
 
     parser.add_argument(
         "--normalize_intrinsic_returns",
-        type=bool,
+        type=str2bool,
         default=True,
         help="Normalize intrinsic returns",
     )
 
     parser.add_argument(
         "--version", type=int, default=1, help="Version. Purely for logging purposes."
+    )
+
+    parser.add_argument(
+        "--force_vanilla",
+        type=str2bool,
+        default=False,
+        help="Force vanilla RL without intrinsic reward",
     )

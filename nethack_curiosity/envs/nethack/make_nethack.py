@@ -2,6 +2,12 @@ from typing import Optional
 
 import gymnasium as gym
 
+from nethack_curiosity.envs.nethack.wrappers.nethack_dlvl_wrapper import (
+    NethackDlvlWrapper,
+)
+from nethack_curiosity.envs.nethack.wrappers.oracle_reward_wrapper import (
+    OracleRewardWrapper,
+)
 from nle.env.tasks import (
     NetHackScore,
     NetHackStaircase,
@@ -14,11 +20,19 @@ from nle.env.tasks import (
 )
 from nle.env.base import NLE
 
-from nethack_curiosity.envs.nethack.wrappers import (
-    __global_order__,
-    __required__,
+from nethack_curiosity.envs.nethack.wrappers.nethack_visit_count import (
+    NethackVisitCountWrapper,
 )
 from sample_factory.utils.typing import Config
+
+from nethack_curiosity.envs.nethack.wrappers.sf_wrappes import (
+    BlstatsInfoWrapper,
+    NLETimeLimit,
+    PrevActionsWrapper,
+    RenderCharImagesWithNumpyWrapperV2,
+    SeedActionSpaceWrapper,
+    TaskRewardsInfoWrapper,
+)
 
 
 # make liberal patterns for matching task names to classes
@@ -47,6 +61,7 @@ def match_name_to_class(name: str) -> type:
 def make_nethack(
     full_env_name: str, cfg=None, env_config=None, render_mode: Optional[str] = None
 ) -> NLE:
+    assert cfg is not None, "cfg must be provided to make_nethack."
     assert render_mode in [None, "human", "ansi", "full"]
     env = _make_nethack(
         name=full_env_name,
@@ -67,8 +82,30 @@ def make_nethack(
         penalty_time=cfg.penalty_time,
     )
 
-    if cfg is not None:
-        env = apply_required_wrappers(env, cfg)
+    if cfg.add_image_observation:
+        env = RenderCharImagesWithNumpyWrapperV2(
+            env,
+            crop_size=cfg.crop_dim,
+            rescale_font_size=(cfg.pixel_size, cfg.pixel_size),
+        )
+    if cfg.use_prev_action:
+        env = PrevActionsWrapper(env)
+
+    if cfg.add_stats_to_info:
+        env = BlstatsInfoWrapper(env)
+        env = TaskRewardsInfoWrapper(env)
+
+    if (
+        cfg.intrinsic_reward_module == "noveld"
+        or cfg.intrinsic_reward_module == "inverse"
+    ):
+        env = NethackVisitCountWrapper(env, cfg)
+
+    env = NethackDlvlWrapper(env, cfg)
+
+    if "oracle" in full_env_name:
+        env = OracleRewardWrapper(env, cfg)
+
     return env
 
 
@@ -193,8 +230,8 @@ def _make_nethack(
     return env
 
 
-def apply_required_wrappers(env: NLE, cfg: Config) -> NLE:
-    for wrapper in __global_order__:
-        if wrapper in __required__:
-            env = wrapper(env, cfg)
-    return env
+# def apply_required_wrappers(env: NLE, cfg: Config) -> NLE:
+#     for wrapper in __global_order__:
+#         if wrapper in __required__:
+#             env = wrapper(env, cfg)
+#     return env

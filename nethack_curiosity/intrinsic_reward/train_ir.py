@@ -1,6 +1,19 @@
 from argparse import ArgumentParser
 from typing import Tuple
 from types import MethodType
+import sys
+
+from nethack_curiosity.intrinsic_reward.intrinsic_reward_algo.intrinsic_reward_buffer_mgr import (
+    IntrinsicRewardBufferMgr,
+    alloc_trajectory_tensors,
+    policy_device,
+)
+import sample_factory.algo.utils.shared_buffers
+
+shared_buffers = sys.modules["sample_factory.algo.utils.shared_buffers"]
+shared_buffers.BufferMgr = IntrinsicRewardBufferMgr
+shared_buffers.alloc_trajectory_tensors = alloc_trajectory_tensors
+shared_buffers.policy_device = policy_device
 
 from sample_factory.algo.learning.batcher import Batcher
 from sample_factory.algo.runners.runner import Runner

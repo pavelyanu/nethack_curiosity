@@ -391,11 +391,12 @@ class IntrinsicRewardLearner(Learner):
         Tensor | float,
         Tensor,
         Tensor,
+        Tensor,
         Dict,
     ]:
-        ################################################
-        # I ADDED ADDITIONAL TENSOR TO THE RETURN TYPE #
-        ################################################
+        #####################################################
+        # I ADDED TWO ADDITIONAL TENSORS TO THE RETURN TYPE #
+        #####################################################
         with torch.no_grad(), self.timing.add_time("losses_init"):
             recurrence: int = self.cfg.recurrence
 
@@ -461,30 +462,13 @@ class IntrinsicRewardLearner(Learner):
             ratio = torch.clamp(ratio, 0.05, 20.0)
 
             values = result["values"].squeeze()
+            #################
+            # MY CODE BLOCK #
+            #################
+            intrinsic_values = result["intrinsic_values"].squeeze()
+            #################
 
             del core_outputs
-
-        #################
-        # MY CODE BLOCK #
-        #################
-        # with self.timing.add_time("intrinsic_rewards"):
-        #     ir_results: TensorDict = self.ir_module.forward(mb)
-        #     for k, v in ir_results.items():
-        #         mb[k] = v
-        #
-        # with self.timing.add_time("intrinsic_returns"):
-        #     ir_advantages = gae_advantages_single_batch(
-        #         mb.intrinsic_rewards,
-        #         mb.dones,
-        #         mb.denormalized_values,
-        #         mb.valids,
-        #         self.cfg.gamma,
-        #         self.cfg.gae_lambda,
-        #     )
-        #
-        #     mb.intrinsic_advantages = ir_advantages
-        #     mb.intrinsic_returns = ir_advantages + mb.valids_next * mb.intrinsic_values
-        #################
 
         # these computations are not the part of the computation graph
         with torch.no_grad(), self.timing.add_time("advantages_returns"):
@@ -520,10 +504,8 @@ class IntrinsicRewardLearner(Learner):
             )  # normalize advantage
 
             pre_ir_adv = adv
-            pre_ir_targets = targets
 
             adv = adv + self.ir_weight * ir_adv
-            targets = targets + self.ir_weight * ir_targets
             #################
 
         with self.timing.add_time("losses"):
@@ -550,6 +532,17 @@ class IntrinsicRewardLearner(Learner):
         # MY CODE BLOCK #
         #################
         with self.timing.add_time("intrinsic_rewards_loss"):
+
+            old_ir_values = mb["intrinsic_values"]
+            intrinsic_value_loss = self._value_loss(
+                intrinsic_values,
+                old_ir_values,
+                ir_targets,
+                clip_value,
+                valids,
+                num_invalids,
+            )
+
             intrinsic_rewards_loss = self.ir_module.loss(mb)
         #################
 
@@ -558,6 +551,7 @@ class IntrinsicRewardLearner(Learner):
             clip_ratio_low=clip_ratio_low,
             clip_ratio_high=clip_ratio_high,
             values=result["values"],
+            intrinsic_values=result["intrinsic_values"],
             adv=adv,
             adv_std=adv_std,
             adv_mean=adv_mean,
@@ -565,11 +559,11 @@ class IntrinsicRewardLearner(Learner):
             # MY CODE BLOCK #
             #################
             intrinsic_rewards_loss=intrinsic_rewards_loss,
+            intrinsic_value_loss=intrinsic_value_loss,
             intrinsic_adv=ir_adv,
             intrinsic_adv_std=ir_adv_std,
             intrinsic_adv_mean=ir_adv_mean,
             pre_ir_adv=pre_ir_adv,
-            pre_ir_targets=pre_ir_targets,
             pre_ir_adv_mean=adv_mean,
             pre_ir_adv_std=adv_std,
             #################
@@ -586,6 +580,7 @@ class IntrinsicRewardLearner(Learner):
             # MY CODE BLOCK #
             #################
             intrinsic_rewards_loss,
+            intrinsic_value_loss,
             #################
             loss_summaries,
         )
@@ -663,6 +658,7 @@ class IntrinsicRewardLearner(Learner):
                         # MY CODE BLOCK #
                         #################
                         intrinsic_rewards_loss,
+                        intrinsic_value_loss,
                         #################
                         loss_summaries,
                     ) = self._calculate_losses(mb, num_invalids)
@@ -676,7 +672,7 @@ class IntrinsicRewardLearner(Learner):
                     #################
                     # MY CODE BLOCK #
                     #################
-                    loss += intrinsic_rewards_loss
+                    loss += intrinsic_rewards_loss + intrinsic_value_loss
                     #################
 
                     epoch_actor_losses[batch_num] = float(actor_loss)
@@ -694,6 +690,7 @@ class IntrinsicRewardLearner(Learner):
                             # MY CODE BLOCK #
                             #################
                             to_scalar(intrinsic_rewards_loss),
+                            to_scalar(intrinsic_value_loss),
                             #################
                         )
 
@@ -835,8 +832,12 @@ class IntrinsicRewardLearner(Learner):
         # ALL MY CODE #
         ###############
         stats = super()._record_summaries(train_loop_vars)
+        stats.update(self.ir_module.summaries())
         stats.intrinsic_rewards_loss = train_loop_vars.intrinsic_rewards_loss.detach()
+        stats.intrinsic_value_loss = train_loop_vars.intrinsic_value_loss.detach()
         intrinsic_rewards = train_loop_vars.mb.intrinsic_rewards.detach()
+        intrinsic_values = train_loop_vars.mb.intrinsic_values.detach()
+        stats.intrinsic_value = intrinsic_values.mean()
         stats.intrinsic_rewards_mean = intrinsic_rewards.mean()
         stats.intrinsic_rewards_max = intrinsic_rewards.max()
         stats.intrinsic_rewards_min = intrinsic_rewards.min()
@@ -871,12 +872,29 @@ class IntrinsicRewardLearner(Learner):
             buff["normalized_obs"] = self._prepare_and_normalize_obs(buff["obs"])
             del buff["obs"]  # don't need non-normalized obs anymore
 
+            #################
+            # MY CODE BLOCK #
+            #################
             # calculate estimated value for the next step (T+1)
+            # now with intrinsic values too
             normalized_last_obs = buff["normalized_obs"][:, -1]
             next_values = self.actor_critic(
                 normalized_last_obs, buff["rnn_states"][:, -1], values_only=True
-            )["values"]
+            )
+            next_intrinsic_values = next_values["intrinsic_values"]
+            next_values = next_values["values"]
             buff["values"][:, -1] = next_values
+            buff["intrinsic_values"][:, -1] = next_intrinsic_values
+            #################
+            # ORIGINAL CODE #
+            #################
+            # # calculate estimated value for the next step (T+1)
+            # normalized_last_obs = buff["normalized_obs"][:, -1]
+            # next_values = self.actor_critic(
+            #     normalized_last_obs, buff["rnn_states"][:, -1], values_only=True
+            # )["values"]
+            # buff["values"][:, -1] = next_values
+            #################
 
             if self.cfg.normalize_returns:
                 # Since our value targets are normalized, the values will also have normalized statistics.
@@ -889,9 +907,24 @@ class IntrinsicRewardLearner(Learner):
                 self.actor_critic.returns_normalizer(
                     denormalized_values, denormalize=True
                 )
+                #################
+                # MY CODE BLOCK #
+                #################
+                denormalized_intrinsic_values = buff[
+                    "intrinsic_values"
+                ].clone()  # need to clone since normalizer is in-place
+                self.actor_critic.returns_normalizer(
+                    denormalized_intrinsic_values, denormalize=True
+                )
+                #################
             else:
                 # values are not normalized in this case, so we can use them as is
                 denormalized_values = buff["values"]
+                #################
+                # MY CODE BLOCK #
+                #################
+                denormalized_intrinsic_values = buff["intrinsic_values"]
+                #################
 
             #################
             # MY CODE BLOCK #
@@ -900,7 +933,6 @@ class IntrinsicRewardLearner(Learner):
                 if not self.ir_module.training:
                     self.ir_module.train()
                 intrinsic_output = self.ir_module(buff, leading_dims=2)
-                intrinsic_rewards = intrinsic_output["intrinsic_rewards"]
                 for key, value in intrinsic_output.items():
                     buff[key] = value
             #################
@@ -921,6 +953,16 @@ class IntrinsicRewardLearner(Learner):
                     * buff["time_outs"]
                     * buff["dones"]
                 )
+                #################
+                # MY CODE BLOCK #
+                #################
+                buff["intrinsic_rewards"].add_(
+                    self.cfg.gamma
+                    * denormalized_intrinsic_values[:, :-1]
+                    * buff["time_outs"]
+                    * buff["dones"]
+                )
+                #################
 
             if not self.cfg.with_vtrace:
                 # calculate advantage estimate (in case of V-trace it is done separately for each minibatch)
@@ -942,9 +984,9 @@ class IntrinsicRewardLearner(Learner):
                 # MY CODE BLOCK #
                 #################
                 buff["intrinsic_advantages"] = gae_advantages(
-                    intrinsic_rewards,
+                    buff["intrinsic_rewards"],
                     buff["dones"],
-                    denormalized_values,
+                    denormalized_intrinsic_values,
                     buff["valids"],
                     self.cfg.gamma,
                     self.cfg.gae_lambda,
@@ -952,29 +994,18 @@ class IntrinsicRewardLearner(Learner):
 
                 buff["intrinsic_returns"] = (
                     buff["intrinsic_advantages"]
-                    + buff["valids"][:, :-1] * denormalized_values[:, :-1]
+                    + buff["valids"][:, :-1] * denormalized_intrinsic_values[:, :-1]
                 )
                 #################
 
             # remove next step obs, rnn_states, and values from the batch, we don't need them anymore
+            for key in ["normalized_obs", "rnn_states", "values", "valids"]:
+                buff[key] = buff[key][:, :-1]
+
             #################
             # MY CODE BLOCK #
             #################
-            # buff["denormalized_values"] = denormalized_values
-            # keys = [
-            #     "normalized_obs",
-            #     "rnn_states",
-            #     "values",
-            #     "valids",
-            #     "denormalized_values",
-            # ]
-            # for key in keys:
-            #     buff[key + "_next"] = buff[key][:, -1]
-            #     buff[key] = buff[key][:, :-1]
-            #################
-            # ORIGINAL CODE #
-            for key in ["normalized_obs", "rnn_states", "values", "valids"]:
-                buff[key] = buff[key][:, :-1]
+            buff["intrinsic_values"] = buff["intrinsic_values"][:, :-1]
             #################
 
             dataset_size = buff["actions"].shape[0] * buff["actions"].shape[1]
@@ -985,9 +1016,21 @@ class IntrinsicRewardLearner(Learner):
             buff["dones_cpu"] = buff["dones"].to(
                 "cpu", copy=True, dtype=torch.float, non_blocking=True
             )
-            buff["rewards_cpu"] = buff["rewards"].to(
-                "cpu", copy=True, dtype=torch.float, non_blocking=True
-            )
+            ###################################################
+            # WE DON'T NEED THIS BECAUSE WE DON'T USE V-TRACE #
+            ###################################################
+            # buff["rewards_cpu"] = buff["rewards"].to(
+            #     "cpu", copy=True, dtype=torch.float, non_blocking=True
+            # )
+            ###################################################
+
+            #################
+            # MY CODE BLOCK #
+            #################
+            # buff["intrinsic_rewards_cpu"] = buff["intrinsic_rewards"].to(
+            #     "cpu", copy=True, dtype=torch.float, non_blocking=True
+            # )
+            #################
 
             # return normalization parameters are only used on the learner, no need to lock the mutex
             if self.cfg.normalize_returns:
@@ -996,9 +1039,6 @@ class IntrinsicRewardLearner(Learner):
             #################
             # MY CODE BLOCK #
             #################
-            buff["intrinsic_returns_pre_normalization"] = buff[
-                "intrinsic_returns"
-            ].clone()
             if self.cfg.normalize_intrinsic_returns:
                 self.ir_module.returns_normalizer(buff["intrinsic_returns"])
             #################

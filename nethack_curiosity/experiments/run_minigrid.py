@@ -1,5 +1,12 @@
 from nethack_curiosity.intrinsic_reward.train_ir import run_ir_rl, parse_ir_args
-from sample_factory.cfg.arguments import parse_full_cfg
+from nethack_curiosity.intrinsic_reward.intrinsic_reward_params import (
+    intrinsic_reward_override_defaults,
+    add_intrinsic_reward_args,
+)
+from nethack_curiosity.models.intrinsic_reward_actor_critic import (
+    make_intrinsic_reward_actor_critic,
+)
+from sample_factory.cfg.arguments import parse_full_cfg, parse_sf_args
 from sample_factory.envs.env_utils import register_env
 from sample_factory.algo.utils.misc import ExperimentStatus
 from sample_factory.algo.utils.context import global_model_factory
@@ -13,11 +20,16 @@ from nethack_curiosity.models.minigrid_models import MinigridEncoder
 
 
 def register_model_components():
+    global_model_factory().register_actor_critic_factory(
+        make_intrinsic_reward_actor_critic
+    )
     global_model_factory().register_encoder_factory(MinigridEncoder)
 
 
 def parse_args(argv=None):
-    parser, partial_cfg = parse_ir_args(argv)
+    parser, partial_cfg = parse_sf_args(argv)
+    add_intrinsic_reward_args("minigrid", parser)
+    intrinsic_reward_override_defaults("minigrid", parser)
     add_minigrid_env_args("minigrid", parser, testing=False)
     minigrid_env_override_defaults("minigrid", parser, testing=False)
     final_cfg = parse_full_cfg(parser, argv)

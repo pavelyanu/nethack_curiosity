@@ -8,3 +8,5 @@ from sf_examples.nethack.models.chaotic_dwarf import (
     ChaoticDwarvenGPT5,
 )
 
+NethackEncoder = ChaoticDwarvenGPT5
+NethackIntrinsicRewardEncoder = ChaoticDwarvenGPT5

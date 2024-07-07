@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 
 import torch
 import torch.nn as nn
@@ -55,6 +55,8 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
             self.inverse_dynamic_model,
         ) = self.create_networks(cfg, self.obs_space, self.action_space)
 
+        self.apply(self.initialize_weights)
+
     def create_networks(
         self, cfg: Config, obs_space: Dict, action_space: Discrete
     ) -> tuple[Encoder, nn.Module, nn.Module]:
@@ -76,7 +78,7 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
         )
         return state_encoder, forward_dynamic_model, inverse_dynamic_model
 
-    def forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
+    def _forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
         if leading_dims == 1:
             return self.compute_intrinsic_reward_for_batch(td)
 
@@ -163,13 +165,96 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
                 f"Unknown visit count weighting scheme: {self.cfg.visit_count_weighting}"
             )
 
-        return TensorDict(
-            intrinsic_rewards=intrinsic_rewards,
-            encoding_current=encoding_current,
-            encoding_next=encoding_next,
-            forward_prediction=forward_prediction,
-            inverse_prediction=inverse_prediction,
-        )
+        if self.cfg.recompute_intrinsic_loss:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+            )
+        else:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+                encoding_current=encoding_current,
+                encoding_next=encoding_next,
+                forward_prediction=forward_prediction,
+                inverse_prediction=inverse_prediction,
+            )
+
+    def forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
+        if leading_dims == 1:
+            return self.compute_intrinsic_reward_for_batch(td)
+
+        normalized_obs = td["normalized_obs"]
+        normalized_obs_shape = normalized_obs[self.observation_keys[0]].shape
+        E, T = normalized_obs_shape[:2]
+
+        reshaped_obs = TensorDict()
+        keys = normalized_obs.keys()
+        for key in keys:
+            new_shape = (E * T,) + normalized_obs[key].shape[2:]
+            reshaped_obs[key] = normalized_obs[key].view(new_shape)
+
+        encoding = self.state_encoder(reshaped_obs)
+        encoding = encoding.view(E, T, -1)
+        encoding_current = encoding[:, :-1]
+        encoding_next = encoding[:, 1:]
+
+        if self.cfg.inverse_action_mode == "onehot":
+            actions = td["actions"]
+            assert torch.all(actions == actions.long())
+            actions = actions.long()
+            actions = torch.nn.functional.one_hot(actions, self.action_space.n).float()
+            actions = torch.squeeze(actions, dim=1)
+        elif self.cfg.inverse_action_mode == "logits":
+            actions = td["action_logits"]
+        elif self.cfg.inverse_action_mode == "logprobs":
+            actions = td["log_prob_actions"]
+        else:
+            raise NotImplementedError(
+                f"Unknown inverse action mode: {self.cfg.inverse_action_mode}"
+            )
+
+        forward_input = torch.cat([encoding_current, actions], dim=-1)
+        forward_input = forward_input.view(E * T - 1, -1)
+        forward_prediction = self.forward_dynamic_model(forward_input)
+        forward_prediction = forward_prediction.view(E, T, -1)
+
+        inverse_input = torch.cat([encoding_current, encoding_next], dim=-1)
+        inverse_input = inverse_input.view(E * T - 1, -1)
+        inverse_prediction = self.inverse_dynamic_model(inverse_input)
+        inverse_prediction = inverse_prediction.view(E, T, -1)
+
+        if self.cfg.inverse_wiring == "icm":
+            intrinsic_rewards = (forward_prediction - encoding_next).pow(2).sum(dim=-1)
+        elif self.cfg.inverse_wiring == "ride":
+            intrinsic_rewards = (encoding_next - encoding_current).pow(2).sum(dim=-1)
+        else:
+            raise NotImplementedError(
+                f"Unknown inverse wiring: {self.cfg.inverse_wiring}"
+            )
+
+        visit_count = normalized_obs["visit_count"]
+        if self.cfg.visit_count_weighting == "inverse_sqrt":
+            intrinsic_rewards /= torch.sqrt(visit_count[:, 1:])
+        elif self.cfg.visit_count_weighting == "novel":
+            visit_count = visit_count == 1
+            intrinsic_rewards *= visit_count[:, 1:]
+        else:
+            assert (
+                self.cfg.visit_count_weighting == "none"
+                f"Unknown visit count weighting scheme: {self.cfg.visit_count_weighting}"
+            )
+
+        if self.cfg.recompute_intrinsic_loss:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+            )
+        else:
+            return TensorDict(
+                intrinsic_rewards=intrinsic_rewards,
+                encoding_current=encoding_current,
+                encoding_next=encoding_next,
+                forward_prediction=forward_prediction,
+                inverse_prediction=inverse_prediction,
+            )
 
     def loss(self, mb: AttrDict) -> Tensor:
         if not self.cfg.recompute_intrinsic_loss:
