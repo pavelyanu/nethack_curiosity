@@ -1,3 +1,4 @@
+import typing
 from typing import List, Union
 
 import torch
@@ -56,6 +57,10 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
         ) = self.create_networks(cfg, self.obs_space, self.action_space)
 
         self.apply(self.initialize_weights)
+
+        self._summaries: typing.Dict = {}
+        if cfg.env_type == "nethack":
+            self._summaries["max_dlvl"] = 1
 
     def create_networks(
         self, cfg: Config, obs_space: Dict, action_space: Discrete
@@ -159,24 +164,20 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
             intrinsic_rewards /= torch.sqrt(visit_count[1:])
         elif self.cfg.visit_count_weighting == "novel":
             intrinsic_rewards *= visit_count[1:] == 1
+        elif self.cfg.visit_count_weighting == "none":
+            pass
         else:
-            assert (
-                self.cfg.visit_count_weighting == "none"
+            raise NotImplementedError(
                 f"Unknown visit count weighting scheme: {self.cfg.visit_count_weighting}"
             )
 
-        if self.cfg.recompute_intrinsic_loss:
-            return TensorDict(
-                intrinsic_rewards=intrinsic_rewards,
-            )
-        else:
-            return TensorDict(
-                intrinsic_rewards=intrinsic_rewards,
-                encoding_current=encoding_current,
-                encoding_next=encoding_next,
-                forward_prediction=forward_prediction,
-                inverse_prediction=inverse_prediction,
-            )
+        return TensorDict(
+            intrinsic_rewards=intrinsic_rewards,
+            encoding_current=encoding_current,
+            encoding_next=encoding_next,
+            forward_prediction=forward_prediction,
+            inverse_prediction=inverse_prediction,
+        )
 
     def forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
         if leading_dims == 1:
@@ -202,7 +203,7 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
             assert torch.all(actions == actions.long())
             actions = actions.long()
             actions = torch.nn.functional.one_hot(actions, self.action_space.n).float()
-            actions = torch.squeeze(actions, dim=1)
+            actions = torch.squeeze(actions, dim=2)
         elif self.cfg.inverse_action_mode == "logits":
             actions = td["action_logits"]
         elif self.cfg.inverse_action_mode == "logprobs":
@@ -213,14 +214,14 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
             )
 
         forward_input = torch.cat([encoding_current, actions], dim=-1)
-        forward_input = forward_input.view(E * T - 1, -1)
+        forward_input = forward_input.view(E * (T - 1), -1)
         forward_prediction = self.forward_dynamic_model(forward_input)
-        forward_prediction = forward_prediction.view(E, T, -1)
+        forward_prediction = forward_prediction.view(E, T - 1, -1)
 
         inverse_input = torch.cat([encoding_current, encoding_next], dim=-1)
-        inverse_input = inverse_input.view(E * T - 1, -1)
+        inverse_input = inverse_input.view(E * (T - 1), -1)
         inverse_prediction = self.inverse_dynamic_model(inverse_input)
-        inverse_prediction = inverse_prediction.view(E, T, -1)
+        inverse_prediction = inverse_prediction.view(E, T - 1, -1)
 
         if self.cfg.inverse_wiring == "icm":
             intrinsic_rewards = (forward_prediction - encoding_next).pow(2).sum(dim=-1)
@@ -237,9 +238,10 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
         elif self.cfg.visit_count_weighting == "novel":
             visit_count = visit_count == 1
             intrinsic_rewards *= visit_count[:, 1:]
+        elif self.cfg.visit_count_weighting == "none":
+            pass
         else:
-            assert (
-                self.cfg.visit_count_weighting == "none"
+            raise NotImplementedError(
                 f"Unknown visit count weighting scheme: {self.cfg.visit_count_weighting}"
             )
 
@@ -256,7 +258,17 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
                 inverse_prediction=inverse_prediction,
             )
 
+    def nethack_collect_summaries(self, mb: AttrDict):
+        self._summaries["max_dlvl"] = torch.max(mb["normalized_obs"]["dlvl"]).item()
+
+    def minigrid_collect_summaries(self, mb: AttrDict):
+        pass
+
     def loss(self, mb: AttrDict) -> Tensor:
+        if self.cfg.env_type == "nethack":
+            self.nethack_collect_summaries(mb)
+        elif self.cfg.env_type == "minigrid":
+            self.minigrid_collect_summaries(mb)
         if not self.cfg.recompute_intrinsic_loss:
             raise NotImplementedError(
                 "Not recomputing intrinsic loss is not implemented yet"
@@ -296,3 +308,8 @@ class InverseModelIntrinsicRewardModule(IntrinsicRewardModule):
                 self.cfg.inverse_loss_weight * inverse_losss
                 + self.cfg.forward_loss_weight * forward_loss
             )
+
+    def summaries(self):
+        s = super().summaries()
+        s.update(self._summaries)
+        return s

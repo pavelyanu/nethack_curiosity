@@ -23,8 +23,8 @@ def add_my_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = Fa
             "message",
             # "inv_glyphs",
             # "inv_strs",
-            # "inv_letters",
-            # "inv_oclasses",
+            "inv_letters",
+            "inv_oclasses",
             # "screen_descriptions",
             "tty_chars",
             "tty_colors",
@@ -301,7 +301,8 @@ def nethack_env_override_defaults(_env, parser):
         learning_rate=0.0001,
         gae_lambda=1.0,
         with_vtrace=False,  # in d&d they've used vtrace
-        normalize_input=False,  # turn off for now and use normalization from d&d
+        normalize_input=True,  # turn off for now and use normalization from d&d
+        normalize_input_keys=["screen", "tty_cursor"],
         normalize_returns=True,
         async_rl=True,
         experiment_summaries_interval=50,

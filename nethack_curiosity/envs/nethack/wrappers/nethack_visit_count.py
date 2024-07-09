@@ -29,11 +29,22 @@ class NethackVisitCountWrapper(gym.Wrapper):
         self.blstats: List[str] = cfg.visit_count_blstats
 
         self.visit_counts = {}
+        self.cfg = cfg
 
     def state_hash(self, obs) -> str:
         blstats = BLStats(*obs["blstats"])
         state = [getattr(blstats, attr) for attr in self.blstats]
-        return "_".join(map(str, state))
+        hash = "_".join(map(str, state))
+        if obs.keys().__contains__("inv_letters") and obs.keys().__contains__(
+            "inv_oclasses"
+        ):
+            letters = map(chr, obs["inv_letters"])
+            oclasses = map(str, obs["inv_oclasses"])
+            inventory = list(zip(letters, oclasses))
+            inventory = sorted(inventory, key=lambda x: x[1])
+            inventory = "".join(["".join(pair) for pair in inventory])
+            hash += "_" + inventory
+        return hash
 
     def reset(self, **kwargs):
         self.visit_counts = {}

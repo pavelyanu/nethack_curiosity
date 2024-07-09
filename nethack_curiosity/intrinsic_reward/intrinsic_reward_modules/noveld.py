@@ -1,3 +1,4 @@
+import typing
 from typing import Iterator, Optional, Union
 
 import torch
@@ -42,6 +43,10 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
 
         self.returns_normalizer: RunningMeanStdInPlace = RunningMeanStdInPlace((1,))
         self.returns_normalizer = torch.jit.script(self.returns_normalizer)
+
+        self._summaries: typing.Dict = {}
+        if cfg.env_type == "nethack":
+            self._summaries["max_dlvl"] = 1
 
     def _forward(self, td: TensorDict, leading_dims: int = 1) -> TensorDict:
         if leading_dims == 1:
@@ -165,7 +170,17 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
                 predictor_features=predictor_features[:, 1:],
             )
 
+    def nethack_collect_summaries(self, mb: AttrDict):
+        self._summaries["max_dlvl"] = torch.max(mb["normalized_obs"]["dlvl"]).item()
+
+    def minigrid_collect_summaries(self, mb: AttrDict):
+        pass
+
     def loss(self, mb: AttrDict) -> Tensor:
+        if self.cfg.env_type == "nethack":
+            self.nethack_collect_summaries(mb)
+        elif self.cfg.env_type == "minigrid":
+            self.minigrid_collect_summaries(mb)
         if self.cfg.recompute_intrinsic_loss:
             target_encoding = self.rnd_module.target_encoder(mb.normalized_obs)
             if self.cfg.rnd_share_encoder:
@@ -185,6 +200,11 @@ class NovelDIntrindicRewardModule(IntrinsicRewardModule):
             return (
                 (target_features.detach() - predictor_features).pow(2).sum(dim=1).mean()
             )
+
+    def summaries(self) -> typing.Dict:
+        s = super().summaries()
+        s.update(self._summaries)
+        return s
 
     def model_to_device(self, device: torch.device):
         self.device = device

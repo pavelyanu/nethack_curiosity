@@ -1,3 +1,4 @@
+import typing
 from typing import List
 
 import torch
@@ -8,6 +9,7 @@ from torch import Tensor
 from nethack_curiosity.intrinsic_reward.intrinsic_reward_modules.base import (
     IntrinsicRewardModule,
 )
+from nethack_curiosity.models.nethack_models import NethackRNDEncoder
 from sample_factory.algo.utils.running_mean_std import RunningMeanStdInPlace
 from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.encoder import Encoder
@@ -46,6 +48,16 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
         self.returns_normalizer = torch.jit.script(self.returns_normalizer)
 
         self.apply(self.initialize_weights)
+
+        self._summaries: typing.Dict = {}
+        if cfg.env_type == "nethack":
+            self._summaries["max_dlvl"] = 1
+
+    def select_encoder_type(self, cfg: Config) -> type:
+        if cfg.env_type == "nethack":
+            return NethackRNDEncoder
+        elif cfg.env_type == "minigrid":
+            return super().select_encoder_type(cfg)
 
     def create_networks(
         self, cfg: Config, obs_space: Space
@@ -197,7 +209,17 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
                 predictor_features=predictor_features,
             )
 
+    def nethack_collect_summaries(self, mb: AttrDict):
+        self._summaries["max_dlvl"] = torch.max(mb["normalized_obs"]["dlvl"]).item()
+
+    def minigrid_collect_summaries(self, mb: AttrDict):
+        pass
+
     def loss(self, mb: AttrDict) -> Tensor:
+        if self.cfg.env_type == "nethack":
+            self.nethack_collect_summaries(mb)
+        elif self.cfg.env_type == "minigrid":
+            self.minigrid_collect_summaries(mb)
         if self.cfg.recompute_intrinsic_loss:
             obs = mb["normalized_obs"]
             if self.cfg.rnd_blank_obs:
@@ -226,6 +248,11 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
             return (
                 (target_features.detach() - predictor_features).pow(2).sum(dim=1).mean()
             )
+
+    def summaries(self):
+        s = super().summaries()
+        s.update(self._summaries)
+        return s
 
     def model_to_device(self, device: torch.device):
         self.device = device
