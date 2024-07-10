@@ -15,6 +15,7 @@ from sample_factory.algo.utils.tensor_dict import TensorDict
 from sample_factory.model.encoder import Encoder
 from sample_factory.utils.attr_dict import AttrDict
 from sample_factory.utils.typing import Config
+from sf_examples.nethack.models import ChaoticDwarvenGPT5
 
 
 def get_observation_space(cfg: Config, obs_space: Space) -> Dict:
@@ -55,7 +56,10 @@ class RNDIntrinsicRewardModule(IntrinsicRewardModule):
 
     def select_encoder_type(self, cfg: Config) -> type:
         if cfg.env_type == "nethack":
-            return NethackRNDEncoder
+            if cfg.rnd_encoder_type == "dwarven":
+                return ChaoticDwarvenGPT5
+            elif cfg.rnd_encoder_type == "linear":
+                return NethackRNDEncoder
         elif cfg.env_type == "minigrid":
             return super().select_encoder_type(cfg)
 

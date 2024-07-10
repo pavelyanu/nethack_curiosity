@@ -11,6 +11,13 @@ def add_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = False
 
 def add_my_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = False):
     parser.add_argument(
+        "--rnd_encoder_type",
+        type=str,
+        default="dwarven",
+        choices=["dwarven", "linear"],
+        help="Type of the RND encoder. Defaults to `dwarven`.",
+    )
+    parser.add_argument(
         "--observation_keys",
         type=str,
         nargs="+",
@@ -26,9 +33,9 @@ def add_my_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = Fa
             "inv_letters",
             "inv_oclasses",
             # "screen_descriptions",
-            "tty_chars",
-            "tty_colors",
-            "tty_cursor",
+            # "tty_chars",
+            # "tty_colors",
+            # "tty_cursor",
         ],
         help="Keys to use when creating the observation. Defaults to all.",
     )
@@ -161,7 +168,7 @@ def add_extra_params_model(parser):
     p.add_argument(
         "--use_prev_action",
         type=str2bool,
-        default=True,
+        default=False,
         help="If True, the model will use previous action. Defaults to `True`",
     )
     p.add_argument(
