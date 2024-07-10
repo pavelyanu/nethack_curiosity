@@ -33,9 +33,9 @@ def add_my_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = Fa
             "inv_letters",
             "inv_oclasses",
             # "screen_descriptions",
-            # "tty_chars",
-            # "tty_colors",
-            # "tty_cursor",
+            "tty_chars",
+            "tty_colors",
+            "tty_cursor",
         ],
         help="Keys to use when creating the observation. Defaults to all.",
     )
