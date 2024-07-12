@@ -75,13 +75,13 @@ def add_my_nethack_env_args(env: str, parser: ArgumentParser, testing: bool = Fa
     parser.add_argument(
         "--oracle_reward_win",
         type=float,
-        default=1.0,
+        default=10.0,
         help="Reward for winning the game. Defaults to 1.0.",
     )
     parser.add_argument(
         "--oracle_reward_loss",
         type=float,
-        default=-1.0,
+        default=-10.0,
         help="Reward for losing the game. Defaults to -1.0.",
     )
     parser.add_argument(
@@ -112,7 +112,7 @@ def add_extra_params_nethack_env(parser):
     p.add_argument(
         "--penalty_step",
         type=float,
-        default=0.0,
+        default=-0.01,
         help="constant applied to amount of frozen steps. Defaults to 0.0.",
     )
     p.add_argument(
@@ -174,7 +174,7 @@ def add_extra_params_model(parser):
     p.add_argument(
         "--use_tty_only",
         type=str2bool,
-        default=True,
+        default=False,
         help="If True, the model will use tty_chars for the topline and bottomline. Defaults to `True`",
     )
     # parameters specific to ScaledNet
@@ -282,10 +282,10 @@ def nethack_env_override_defaults(_env, parser):
         env_type="nethack",
         use_record_episode_statistics=False,
         gamma=0.999,
-        num_workers=16,
+        num_workers=8,
         num_envs_per_worker=32,
         worker_num_splits=2,
-        train_for_env_steps=2_000_000_000,
+        train_for_env_steps=500_000_000,
         nonlinearity="relu",
         use_rnn=True,
         rnn_type="lstm",
@@ -295,7 +295,7 @@ def nethack_env_override_defaults(_env, parser):
         adaptive_stddev=False,  # True only for continous action distributions
         reward_scale=1.0,
         reward_clip=10.0,
-        batch_size=2048,
+        batch_size=4096,
         rollout=128,
         max_grad_norm=4,
         num_epochs=1,

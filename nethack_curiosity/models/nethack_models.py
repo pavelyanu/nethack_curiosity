@@ -4,7 +4,7 @@ from torch import nn
 import torch
 
 from sample_factory.model.encoder import Encoder
-from sample_factory.utils.typing import Config
+from sample_factory.utils.typing import Config, ObsSpace
 from sf_examples.nethack.models.chaotic_dwarf import (
     MessageEncoder,
     BLStatsEncoder,
@@ -101,6 +101,124 @@ class NethackRNDEncoder(Encoder):
         return self.encoder_out_size
 
 
+class RNDChaoticDwarvenGPT5(Encoder):
+    def __init__(self, cfg: Config, obs_space: ObsSpace):
+        super().__init__(cfg)
+        self.obs_keys = list(sorted(obs_space.keys()))  # always the same order
+        self.encoders = nn.ModuleDict()
+
+        self.use_tty_only = cfg.use_tty_only
+        self.use_prev_action = cfg.use_prev_action
+
+        # screen encoder (TODO: could also use only tty_chars)
+        pixel_size = cfg.pixel_size
+        if cfg.crop_dim == 0:
+            screen_shape = (24 * pixel_size, 80 * pixel_size)
+        else:
+            screen_shape = (cfg.crop_dim * pixel_size, cfg.crop_dim * pixel_size)
+        self.screen_encoder = torch.jit.script(ScreenEncoder(screen_shape))
+        screen_shape = obs_space["screen_image"].shape
+
+        # top and bottom encoders
+        if self.use_tty_only:
+            self.topline_encoder = TopLineEncoder()
+            self.bottomline_encoder = torch.jit.script(BottomLinesEncoder())
+            topline_shape = (obs_space["tty_chars"].shape[1],)
+            bottomline_shape = (2 * obs_space["tty_chars"].shape[1],)
+        else:
+            self.topline_encoder = torch.jit.script(MessageEncoder())
+            self.bottomline_encoder = torch.jit.script(BLStatsEncoder())
+            topline_shape = obs_space["message"].shape
+            bottomline_shape = obs_space["blstats"].shape
+
+        if self.use_prev_action:
+            self.num_actions = obs_space["prev_actions"].n
+            self.prev_actions_dim = self.num_actions
+        else:
+            self.num_actions = None
+            self.prev_actions_dim = 0
+
+        # inv_letters and inv_oclasses
+        if "inv_letters" in obs_space:
+            self.inv_letters_encoder = torch.jit.script(
+                InvLettersEncoder(cfg, obs_space)
+            )
+            self.inv_letters_dim = self.inv_letters_encoder.get_out_size()
+        else:
+            self.inv_letters_dim = 0
+        if "inv_oclasses" in obs_space:
+            self.inv_oclasses_encoder = torch.jit.script(
+                InvOClassesEncoder(cfg, obs_space)
+            )
+            self.inv_oclasses_dim = self.inv_oclasses_encoder.get_out_size()
+        else:
+            self.inv_oclasses_dim = 0
+
+        self.encoder_out_size = sum(
+            [
+                calc_num_elements(self.screen_encoder, screen_shape),
+                calc_num_elements(self.topline_encoder, topline_shape),
+                calc_num_elements(self.bottomline_encoder, bottomline_shape),
+                self.prev_actions_dim,
+                self.inv_letters_dim,
+                self.inv_oclasses_dim,
+            ]
+        )
+
+    def forward(self, obs_dict):
+        B, C, H, W = obs_dict["screen_image"].shape
+
+        if self.use_tty_only:
+            topline = obs_dict["tty_chars"][..., 0, :]
+            bottom_line = obs_dict["tty_chars"][..., -2:, :]
+        else:
+            topline = obs_dict["message"]
+            bottom_line = obs_dict["blstats"]
+
+        encodings = [
+            self.topline_encoder(
+                topline.float(memory_format=torch.contiguous_format).view(B, -1)
+            ),
+            self.bottomline_encoder(
+                bottom_line.float(memory_format=torch.contiguous_format).view(B, -1)
+            ),
+            self.screen_encoder(
+                obs_dict["screen_image"]
+                .float(memory_format=torch.contiguous_format)
+                .view(B, C, H, W)
+            ),
+        ]
+
+        if self.use_prev_action:
+            prev_actions = obs_dict["prev_actions"].long().view(B)
+            encodings.append(
+                torch.nn.functional.one_hot(prev_actions, self.num_actions)
+            )
+
+        if self.inv_letters_dim > 0:
+            encodings.append(
+                self.inv_letters_encoder(
+                    obs_dict["inv_letters"]
+                    .float(memory_format=torch.contiguous_format)
+                    .view(B, -1)
+                )
+            )
+
+        if self.inv_oclasses_dim > 0:
+            encodings.append(
+                self.inv_oclasses_encoder(
+                    obs_dict["inv_oclasses"]
+                    .float(memory_format=torch.contiguous_format)
+                    .view(B, -1)
+                )
+            )
+
+        return torch.cat(encodings, dim=1)
+
+    def get_out_size(self) -> int:
+        return self.encoder_out_size
+
+
 class RNDScreenEncoder(nn.Module):
     def __init__(self, cfg: Config, obs_space: Space):
         super().__init__()
@@ -173,6 +291,7 @@ class InvLettersEncoder(nn.Module):
         self.hidden_size = 512
 
         self.inv_letters_range = 128.0
+        self.inv_letters_start = 32.0
 
         self.fc = nn.Sequential(
             nn.Linear(self.inv_letters_dim, self.hidden_size),
@@ -180,7 +299,8 @@ class InvLettersEncoder(nn.Module):
         )
 
     def forward(self, obs):
-        x = obs / self.inv_letters_range
+        x = obs - self.inv_letters_start
+        x = x / self.inv_letters_range
         x = self.fc(x)
         return x
 

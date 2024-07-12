@@ -163,14 +163,14 @@ def add_intrinsic_reward_args(env: str, parser: ArgumentParser):
     parser.add_argument(
         "--env_type",
         type=str,
-        default="minigrid",
+        default="nethack",
         choices=["nethack", "minigrid"],
     )
 
     parser.add_argument(
         "--intrinsic_reward_weight",
         type=float,
-        default=1.0,
+        default=0.5,
         help="Weight of the intrinsic reward",
     )
 
