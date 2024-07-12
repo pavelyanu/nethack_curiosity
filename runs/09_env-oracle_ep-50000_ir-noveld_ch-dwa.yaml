@@ -1,0 +1,6 @@
+character: val-dwa-law-fem
+env: oracle
+intrinsic_reward_module: noveld
+intrinsic_reward_weight: 1.0
+max_episode_steps: 50000
+restart_behavior: resume

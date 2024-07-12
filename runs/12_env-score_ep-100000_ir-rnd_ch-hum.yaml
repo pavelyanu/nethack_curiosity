@@ -1,0 +1,6 @@
+character: mon-hum-neu-mal
+env: score
+intrinsic_reward_module: rnd
+intrinsic_reward_weight: 0.5
+max_episode_steps: 100000
+restart_behavior: resume

@@ -20,8 +20,8 @@ def intrinsic_reward_override_defaults(env: str, parser: ArgumentParser):
         inverse_action_mode="onehot",
         inverse_loss_weight=1.0,
         forward_loss_weight=1.0,
-        env_type="minigrid",
-        intrinsic_reward_weight=1.0,
+        env_type="nethack",
+        intrinsic_reward_weight=0.5,
         normalize_intrinsic_returns=True,
         version=1,
     )

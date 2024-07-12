@@ -1,0 +1,8 @@
+character: mon-hum-neu-mal
+env: score
+intrinsic_reward_module: inverse
+intrinsic_reward_weight: 0.5
+inverse_wiring: icm
+max_episode_steps: 100000
+restart_behavior: resume
+visit_count_weighting: none

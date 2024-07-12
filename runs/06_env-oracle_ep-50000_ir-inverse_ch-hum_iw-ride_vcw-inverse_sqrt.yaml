@@ -1,0 +1,8 @@
+character: mon-hum-neu-mal
+env: oracle
+intrinsic_reward_module: inverse
+intrinsic_reward_weight: 1.0
+inverse_wiring: ride
+max_episode_steps: 50000
+restart_behavior: resume
+visit_count_weighting: inverse_sqrt

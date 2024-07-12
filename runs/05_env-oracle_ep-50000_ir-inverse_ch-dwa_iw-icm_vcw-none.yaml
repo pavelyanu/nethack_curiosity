@@ -1,0 +1,8 @@
+character: val-dwa-law-fem
+env: oracle
+intrinsic_reward_module: inverse
+intrinsic_reward_weight: 1.0
+inverse_wiring: icm
+max_episode_steps: 50000
+restart_behavior: resume
+visit_count_weighting: none
