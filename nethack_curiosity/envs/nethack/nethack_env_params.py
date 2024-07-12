@@ -282,7 +282,7 @@ def nethack_env_override_defaults(_env, parser):
         env_type="nethack",
         use_record_episode_statistics=False,
         gamma=0.999,
-        num_workers=8,
+        num_workers=16,
         num_envs_per_worker=32,
         worker_num_splits=2,
         train_for_env_steps=500_000_000,
