@@ -28,3 +28,5 @@ pip install -e .
 ## Running experiments
 
 Experiments can be run through `experiments/nethack/run_nethack.py` python module.
+
+To run a specific configuration from `runs`  set the value in `ID` file to the id of the run and run sweep.sh. The results in the reports are obtained from runs 0, 2, 4, 6, 8, 10, 12, 14, 16 and 19.
