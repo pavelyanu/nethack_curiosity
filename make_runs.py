@@ -34,7 +34,6 @@ def get_filename(params):
     return "_".join(parts) + ".yaml"
 
 
-# Define the grid
 grid = {
     "env": ["oracle", "score"],
     "max_episode_steps": [50000, 100000],
@@ -44,10 +43,8 @@ grid = {
     "character": ["mon-hum-neu-mal", "val-dwa-law-fem"],
 }
 
-# Generate all combinations
 combinations = list(itertools.product(*grid.values()))
 
-# Remove identical combinations
 for i in range(len(combinations) - 1, -1, -1):
     if combinations[i] in combinations[:i]:
         del combinations[i]
@@ -55,11 +52,9 @@ for i in range(len(combinations) - 1, -1, -1):
 
 files = {}
 
-# Create YAML files
 for combo in combinations:
     params = dict(zip(grid.keys(), combo))
 
-    # Apply constraints
     if params["env"] == "oracle":
         params["intrinsic_reward_weight"] = 1.0
     if params["env"] == "score":
